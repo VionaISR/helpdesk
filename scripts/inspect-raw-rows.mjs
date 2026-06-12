@@ -1,0 +1,13 @@
+import fs from 'fs';
+const xml = fs.readFileSync('C:/Users/viona.suchita.os/AppData/Local/Temp/mapping-xlsx-extract/xl/worksheets/sheet2.xml', 'utf-8');
+const m41 = xml.match(/<row[^>]*r="41"[^>]*>.*?<\/row>/s);
+console.log('ROW 41 (Property System, currently empty PIC):');
+console.log(m41 ? m41[0].slice(0, 1500) : 'not found');
+console.log();
+const m4 = xml.match(/<row[^>]*r="4"[^>]*>.*?<\/row>/s);
+console.log('ROW 4 (Cost Contract, has PIC=Leonagata):');
+console.log(m4 ? m4[0].slice(0, 1500) : 'not found');
+console.log();
+const m3 = xml.match(/<row[^>]*r="3"[^>]*>.*?<\/row>/s);
+console.log('ROW 3 (header):');
+console.log(m3 ? m3[0].slice(0, 600) : 'not found');

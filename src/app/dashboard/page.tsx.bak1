@@ -1,0 +1,446 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import emailjs from '@emailjs/browser';
+import { getSession, logout } from '@/lib/auth';
+import { ticketStore } from '@/lib/store';
+import { emailConfig, teams, categories, apps, specificTasks, kbArticles, pics } from '@/lib/data';
+import { appRulesStore } from '@/lib/app-rules';
+import { formatDate, formatDateTime, timeAgo, statusClass, generateTicketId } from '@/lib/utils';
+import type { Ticket, Session, Comment } from '@/types';
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+function Toast({ toast }: { toast: { msg: string; type: string } }) {
+  const colors: Record<string, string> = { success: '#16a34a', warn: '#d97706', error: '#dc2626' };
+  const icons: Record<string, string>  = { success: '✓', warn: '⚠', error: '✕' };
+  return (
+    <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background: colors[toast.type] || colors.success, color:'#fff', padding:'12px 18px', borderRadius:8, boxShadow:'0 4px 20px rgba(0,0,0,0.18)', fontSize:13, fontWeight:500, maxWidth:380, display:'flex', alignItems:'flex-start', gap:10, lineHeight:1.5 }}>
+      <span style={{ fontWeight:700, flexShrink:0 }}>{icons[toast.type] || '✓'}</span>
+      <span>{toast.msg}</span>
+    </div>
+  );
+}
+
+// ─── SUBMIT MODAL ─────────────────────────────────────────────────────────────
+function SubmitModal({ session, onClose, onSubmit }: { session: Session; onClose: () => void; onSubmit: (t: Ticket) => void }) {
+  const [form, setForm] = useState({ subject: '', body: '', appName: '', specificTask: '' });
+
+  // Auto-derive category from app selection
+  const selectedApp = apps.find(a => a.name === form.appName);
+  const categoryId = selectedApp ? selectedApp.prefix : '';
+
+  // Auto-assign PIC from admin-configured rules (berdasarkan aplikasi)
+  const rule = form.appName ? appRulesStore.getForApp(form.appName) : null;
+  const assignedPic = rule ? pics.find(p => p.id === rule.picId) : null;
+  const assignedTeam = assignedPic ? assignedPic.teamId : null;
+
+  const isValid = form.subject && form.appName && form.specificTask && form.body;
+
+  const submit = () => {
+    if (!isValid) return;
+    const now = new Date().toISOString();
+    const ticket: Ticket = {
+      id: generateTicketId(),
+      subject: form.subject,
+      from: session.email,
+      fromName: session.name,
+      dept: 'Karyawan',
+      body: form.body,
+      category: categoryId,
+      app: form.appName,
+      specificTask: form.specificTask,
+      priority: 'Medium',
+      assigneeTeamId: assignedTeam,
+      assignedToId: assignedPic?.id ?? null,
+      assignedName: assignedPic?.name ?? 'Unassigned',
+      status: 'Open',
+      autoRouted: false,
+      createdAt: now,
+      updatedAt: now,
+      slaDeadline: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+      comments: [],
+      attachments: [],
+      activity: [{ type: 'system', time: now, text: `Tiket dibuat. PIC auto-assign: ${assignedPic?.name ?? 'Unassigned'} (dari routing rules)` }],
+      isNew: true,
+    };
+    ticketStore.add(ticket);
+    onSubmit(ticket);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">Buat Tiket Baru</div>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>Tutup</button>
+        </div>
+        <div className="modal-body">
+          <div className="field">
+            <label className="label">Subject *</label>
+            <input className="input" value={form.subject} onChange={e => setForm(p => ({ ...p, subject: e.target.value }))} placeholder="Ringkasan masalah singkat" />
+          </div>
+
+          <div className="field">
+            <label className="label">Nama Aplikasi *</label>
+            <select className="input" value={form.appName} onChange={e => setForm(p => ({ ...p, appName: e.target.value }))}>
+              <option value="">— Pilih Aplikasi —</option>
+              {apps.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
+            </select>
+            {categoryId && <div className="field-hint">Kategori: {categoryId}</div>}
+          </div>
+
+          {/* PIC auto-assign — muncul setelah pilih aplikasi */}
+          {form.appName && (
+            <div style={{ marginBottom: 16, padding: 12, borderRadius: 6, border: `1px solid ${assignedPic ? 'var(--status-done)' : 'var(--border)'}`, background: assignedPic ? 'var(--status-done-bg)' : 'var(--surface-2)' }}>
+              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 6 }}>PIC yang akan menangani</div>
+              {assignedPic ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="user-avatar" style={{ width: 24, height: 24, fontSize: 10 }}>{assignedPic.initials}</div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--status-done)' }}>{assignedPic.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{teams.find(t => t.id === assignedPic.teamId)?.name}</div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  ⚠ Belum ada PIC untuk aplikasi ini. Tiket masuk sebagai <strong>Unassigned</strong>, admin akan assign manual.
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="field">
+            <label className="label">Specific Task *</label>
+            <select className="input" value={form.specificTask} onChange={e => setForm(p => ({ ...p, specificTask: e.target.value }))}>
+              <option value="">— Pilih Task —</option>
+              {specificTasks.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+            </select>
+          </div>
+
+          <div className="field">
+            <label className="label">Deskripsi Masalah *</label>
+            <textarea className="textarea" value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} placeholder="Jelaskan masalahnya sedetail mungkin..." />
+            <div className="field-hint">Sertakan error message kalau ada, dan apa yang sudah dicoba</div>
+          </div>
+          <div className="field">
+            <label className="label">Lampiran (opsional)</label>
+            <input type="file" className="input" />
+            <div className="field-hint">Screenshot atau file pendukung. Max 5MB.</div>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>Batal</button>
+          <button className="btn btn-primary" onClick={submit} disabled={!isValid}>Kirim Tiket</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── TICKET DETAIL MODAL ──────────────────────────────────────────────────────
+function TicketDetailModal({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
+  const [rating, setRating] = useState(0);
+  const isDone   = ticket.status === 'Done';
+  const isClosed = ticket.status === 'Closed';
+  const isRevisi = ticket.status === 'Revisi';
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth:680 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">{ticket.subject}</div>
+            <div className="mono" style={{ color:'var(--text-muted)', marginTop:4 }}>{ticket.id}</div>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>Tutup</button>
+        </div>
+        <div className="modal-body">
+          <div style={{ display:'flex', gap:12, marginBottom:16, flexWrap:'wrap' }}>
+            <span className={`badge ${statusClass(ticket.status)}`}><span className="badge-dot"></span>{ticket.status}</span>
+            <span className={`priority priority-${ticket.priority.toLowerCase()}`}><span className="priority-bar"></span>{ticket.priority}</span>
+            <span style={{ fontSize:12, color:'var(--text-muted)' }}>· {ticket.category}</span>
+            <span style={{ fontSize:12, color:'var(--text-muted)' }}>· {ticket.assignedName}</span>
+          </div>
+          <div style={{ background:'var(--surface-2)', padding:14, borderRadius:6, marginBottom:16, fontSize:13, lineHeight:1.6 }}>
+            {ticket.body}
+          </div>
+          {isRevisi && (
+            <div style={{ marginBottom:16, padding:14, background:'var(--status-revisi-bg)', border:'1px solid var(--status-revisi)', borderRadius:6 }}>
+              <div style={{ fontWeight:600, fontSize:13, color:'var(--status-revisi)', marginBottom:4 }}>Tiket dikembalikan untuk revisi</div>
+              <div style={{ fontSize:12, color:'var(--status-revisi)' }}>Admin atau tim IT meminta klarifikasi. Silakan buat tiket baru jika diperlukan.</div>
+            </div>
+          )}
+          <div style={{ fontWeight:600, fontSize:13, marginBottom:8 }}>Aktivitas</div>
+          {ticket.comments.filter(c => !c.isInternal).length > 0 ? ticket.comments.filter(c => !c.isInternal).map(c => (
+            <div key={c.id} className="comment">
+              <div className="comment-head">
+                <div className="comment-avatar">{c.authorInitials}</div>
+                <div><div className="comment-name">{c.authorName}</div><div className="comment-time">{formatDateTime(c.time)}</div></div>
+              </div>
+              <div className="comment-body">{c.body}</div>
+            </div>
+          )) : (
+            <div style={{ fontSize:13, color:'var(--text-muted)', padding:'12px 0' }}>Belum ada balasan dari tim IT</div>
+          )}
+          {(isDone || isClosed) && (
+            <div style={{ marginTop:20, padding:14, border:'1px solid var(--status-done)', borderRadius:6, background:'var(--status-done-bg)' }}>
+              <div style={{ fontWeight:600, fontSize:13, color:'var(--status-done)', marginBottom:4 }}>Tiket sudah selesai</div>
+              <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:10 }}>Bagaimana penanganannya?</div>
+              <div style={{ display:'flex', gap:6 }}>
+                {[1,2,3,4,5].map(n => (
+                  <button key={n} className={`btn btn-sm ${rating === n ? 'btn-primary' : 'btn-secondary'}`} style={{ minWidth:38 }} onClick={() => setRating(n)}>{n}★</button>
+                ))}
+              </div>
+              {rating > 0 && <div style={{ fontSize:12, color:'var(--status-done)', marginTop:8 }}>Terima kasih atas penilaianmu!</div>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── HOME PAGE ────────────────────────────────────────────────────────────────
+function HomePage({ stats, tickets, onTicketClick, onNewTicket }: {
+  stats: { open: number; done: number; total: number };
+  tickets: Ticket[];
+  onTicketClick: (t: Ticket) => void;
+  onNewTicket: () => void;
+}) {
+  const recent = tickets.slice(0, 3);
+  return (
+    <div>
+      <div className="stat-grid">
+        <div className="stat"><div className="stat-label">Tiket aktif</div><div className="stat-value">{stats.open}</div><div className="stat-trend">Sedang dikerjakan tim IT</div></div>
+        <div className="stat"><div className="stat-label">Selesai</div><div className="stat-value">{stats.done}</div><div className="stat-trend">Dalam 30 hari terakhir</div></div>
+        <div className="stat"><div className="stat-label">Total tiket</div><div className="stat-value">{stats.total}</div><div className="stat-trend">Sepanjang waktu</div></div>
+      </div>
+      <div className="card" style={{ marginBottom:16 }}>
+        <div className="card-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div><div className="card-title">Tiket Terbaru</div><div className="card-subtitle">3 tiket terakhir yang Anda buat</div></div>
+        </div>
+        {recent.length > 0 ? (
+          <table className="table">
+            <thead><tr><th>ID Tiket</th><th>Subject</th><th>Status</th><th>Dibuat</th></tr></thead>
+            <tbody>
+              {recent.map(t => (
+                <tr key={t.id} onClick={() => onTicketClick(t)}>
+                  <td className="mono" style={{ fontSize:11, color:'var(--text-muted)' }}>{t.id}</td>
+                  <td style={{ fontWeight:500 }}>{t.subject}</td>
+                  <td><span className={`badge ${statusClass(t.status)}`}><span className="badge-dot"></span>{t.status}</span></td>
+                  <td style={{ color:'var(--text-muted)', fontSize:12 }}>{timeAgo(t.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="empty"><div className="empty-title">Belum ada tiket</div><div className="empty-sub">Buat tiket baru kalau ada masalah IT</div></div>
+        )}
+      </div>
+      <div className="card">
+        <div className="card-body">
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div>
+              <div style={{ fontWeight:600, marginBottom:4 }}>Sebelum buat tiket baru</div>
+              <div style={{ fontSize:13, color:'var(--text-muted)' }}>Cek dulu di Knowledge Base, mungkin masalahnya sudah ada solusinya.</div>
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={onNewTicket}>+ Buat Tiket</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── TICKETS PAGE ─────────────────────────────────────────────────────────────
+function TicketsPage({ tickets, onTicketClick }: { tickets: Ticket[]; onTicketClick: (t: Ticket) => void }) {
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const filtered = tickets
+    .filter(t => {
+      if (filter === 'active') return ['Open','In Progress','Pending','Revisi'].includes(t.status);
+      if (filter === 'done') return ['Done','Closed'].includes(t.status);
+      return true;
+    })
+    .filter(t => !search || t.subject.toLowerCase().includes(search.toLowerCase()) || t.id.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div>
+      <div className="filters">
+        <input className="filter-input" placeholder="Cari berdasarkan ID atau subject..." value={search} onChange={e => setSearch(e.target.value)} />
+        <select className="filter-select" value={filter} onChange={e => setFilter(e.target.value)}>
+          <option value="all">Semua status</option>
+          <option value="active">Aktif</option>
+          <option value="done">Selesai</option>
+        </select>
+      </div>
+      <div className="card">
+        <table className="table">
+          <thead><tr><th>ID</th><th>Subject</th><th>Kategori</th><th>Status</th><th>Assigned</th><th>Dibuat</th></tr></thead>
+          <tbody>
+            {filtered.map(t => (
+              <tr key={t.id} onClick={() => onTicketClick(t)}>
+                <td className="mono" style={{ fontSize:11, color:'var(--text-muted)' }}>{t.id}</td>
+                <td style={{ fontWeight:500 }}>{t.subject}</td>
+                <td style={{ fontSize:12, color:'var(--text-muted)' }}>{t.category}</td>
+                <td><span className={`badge ${statusClass(t.status)}`}><span className="badge-dot"></span>{t.status}</span></td>
+                <td style={{ fontSize:12 }}>{t.assignedName}</td>
+                <td style={{ color:'var(--text-muted)', fontSize:12 }}>{formatDate(t.createdAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── KB PAGE ──────────────────────────────────────────────────────────────────
+function KBPage() {
+  const [search, setSearch] = useState('');
+  const filtered = kbArticles.filter(a => !search || a.title.toLowerCase().includes(search.toLowerCase()));
+  return (
+    <div>
+      <div style={{ marginBottom:20 }}>
+        <input className="input" placeholder="Cari artikel solusi..." style={{ maxWidth:480 }} value={search} onChange={e => setSearch(e.target.value)} />
+      </div>
+      <div className="kb-list">
+        {filtered.map(a => (
+          <div key={a.id} className="kb-item">
+            <div className="kb-title">{a.title}</div>
+            <div className="kb-meta">
+              <span>{a.category}</span><span>·</span>
+              <span>{a.views} kali dibaca</span><span>·</span>
+              <span>Update {formatDate(a.updated)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
+export default function DashboardPage() {
+  const router = useRouter();
+  const [session, setSession] = useState<Session | null>(null);
+  const [page, setPage] = useState('home');
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const [showSubmit, setShowSubmit] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
+  const [myTickets, setMyTickets] = useState<Ticket[]>([]);
+
+  useEffect(() => {
+    const s = getSession();
+    if (!s) { router.replace('/login'); return; }
+    setSession(s);
+    setMyTickets(ticketStore.getAll().filter(t => t.from === s.email));
+  }, [router]);
+
+  useEffect(() => {
+    if (!session) return;
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === ticketStore.KEY) {
+        setMyTickets(ticketStore.getAll().filter(t => t.from === session.email));
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [session]);
+
+  const showToast = (msg: string, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 5000);
+  };
+
+  const sendTicketEmail = async (ticket: Ticket) => {
+    if (!emailConfig.enabled) { showToast('Email notifikasi belum aktif', 'warn'); return; }
+    const team = teams.find(t => t.id === ticket.assigneeTeamId);
+    try {
+      await emailjs.send(emailConfig.serviceId, emailConfig.templateId, {
+        to_email: emailConfig.notifyEmail, ticket_id: ticket.id,
+        ticket_subject: ticket.subject, ticket_from: ticket.fromName,
+        ticket_email: ticket.from, ticket_team: team?.name || '-',
+        ticket_pic: ticket.assignedName, ticket_app: ticket.app,
+        ticket_task: ticket.specificTask, ticket_priority: ticket.priority,
+        ticket_category: ticket.category, ticket_body: ticket.body,
+        created_at: new Date(ticket.createdAt).toLocaleString('id-ID'),
+      }, emailConfig.publicKey);
+      showToast('Email notifikasi terkirim ke ' + emailConfig.notifyEmail);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast('Tiket tersimpan. Gagal kirim email: ' + msg, 'error');
+    }
+  };
+
+  if (!session) return null;
+
+  const stats = {
+    open:  myTickets.filter(t => ['Open','In Progress','Pending','Revisi'].includes(t.status)).length,
+    done:  myTickets.filter(t => ['Done','Closed'].includes(t.status)).length,
+    total: myTickets.length,
+  };
+
+  const selectedTicket = selectedTicketId ? myTickets.find(t => t.id === selectedTicketId) ?? null : null;
+
+  const pageTitle = page === 'home' ? 'Beranda' : page === 'tickets' ? 'Tiket Saya' : 'Knowledge Base';
+
+  return (
+    <div className="app">
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <div className="sidebar-title">Helpdesk IT</div>
+          <div className="sidebar-sub">Portal Karyawan</div>
+        </div>
+        <nav className="sidebar-nav">
+          <div className="nav-section">
+            <div className="nav-section-title">Menu</div>
+            <a className={`nav-item ${page==='home'?'active':''}`} onClick={() => setPage('home')}><span>Beranda</span></a>
+            <a className={`nav-item ${page==='tickets'?'active':''}`} onClick={() => setPage('tickets')}><span>Tiket Saya</span><span className="nav-count">{stats.total}</span></a>
+            <a className={`nav-item ${page==='kb'?'active':''}`} onClick={() => setPage('kb')}><span>Knowledge Base</span></a>
+          </div>
+        </nav>
+        <div className="sidebar-footer">
+          <div className="user-card">
+            <div className="user-avatar">{session.initials}</div>
+            <div><div className="user-name">{session.name}</div><div className="user-role">Karyawan</div></div>
+          </div>
+          <button className="btn btn-ghost btn-sm" style={{ width:'100%', marginTop:4 }} onClick={() => { logout(); router.replace('/login'); }}>Logout</button>
+        </div>
+      </aside>
+
+      <main className="main">
+        <div className="topbar">
+          <div>
+            <div className="topbar-title">{pageTitle}</div>
+            <div className="topbar-breadcrumb">User Portal</div>
+          </div>
+          <div className="topbar-actions">
+            <button className="btn btn-primary btn-sm" onClick={() => setShowSubmit(true)}>+ Buat Tiket Baru</button>
+          </div>
+        </div>
+        <div className="content">
+          {page === 'home' && <HomePage stats={stats} tickets={myTickets} onTicketClick={t => setSelectedTicketId(t.id)} onNewTicket={() => setShowSubmit(true)} />}
+          {page === 'tickets' && <TicketsPage tickets={myTickets} onTicketClick={t => setSelectedTicketId(t.id)} />}
+          {page === 'kb' && <KBPage />}
+        </div>
+      </main>
+
+      {toast && <Toast toast={toast} />}
+      {showSubmit && (
+        <SubmitModal
+          session={session}
+          onClose={() => setShowSubmit(false)}
+          onSubmit={t => { setMyTickets(prev => [t, ...prev]); setShowSubmit(false); sendTicketEmail(t); }}
+        />
+      )}
+      {selectedTicket && (
+        <TicketDetailModal
+          ticket={selectedTicket}
+          onClose={() => setSelectedTicketId(null)}
+        />
+      )}
+    </div>
+  );
+}

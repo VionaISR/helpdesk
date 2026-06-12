@@ -1,0 +1,193 @@
+LAPORAN PROGRES PENGEMBANGAN: IT HELPDESK SYSTEM
+Tanggal  : 9 Juni 2026
+Dibuat oleh : Tim IT
+================================================================
+
+
+RINGKASAN EKSEKUTIF
+
+Sistem IT Helpdesk berbasis web telah berhasil dikembangkan sebagai
+prototipe internal untuk mengelola dan melacak permintaan dukungan
+teknis (tiket) dari seluruh karyawan PT Lippo Karawaci Tbk. Sistem
+ini menggantikan proses manual (email/chat langsung ke tim IT) dengan
+alur kerja yang terstruktur dan transparan.
+
+
+================================================================
+FITUR YANG SUDAH TERSEDIA
+================================================================
+
+1. SISTEM LOGIN & HAK AKSES (ROLE-BASED)
+   Sistem login menggunakan email kantor dan password, dengan tiga
+   tingkatan akses:
+   - Admin : akses penuh ke semua fitur dan konfigurasi
+   - PIC   : melihat dan menangani tiket yang di-assign ke mereka
+   - User  : submit dan pantau status tiket sendiri
+
+   Pembedaan akun PIC vs User sepenuhnya dikendalikan oleh Admin
+   (tidak ada self-registration). Setiap akun memiliki field 'role'
+   yang menentukan:
+   - Halaman tujuan setelah login (Admin=/admin, PIC=/pic, User=/dashboard)
+   - Data yang wajib diisi saat pendaftaran:
+       PIC  -> Tim (teamId) + ID PIC untuk keperluan assignment tiket
+       User -> Departemen (dept) sebagai identitas pemohon tiket
+
+2. PORTAL USER - SUBMIT TIKET
+   Karyawan dapat mengajukan permintaan IT dengan mengisi:
+   - Nama aplikasi (pencarian ketik, tidak perlu scroll panjang)
+   - Jenis permintaan / Specific Task (juga bisa dicari dengan ketik)
+   - Subject dan deskripsi masalah
+   - Lampiran jika diperlukan
+   Tiket yang masuk langsung muncul di dashboard admin dan PIC
+   secara real-time.
+
+3. PORTAL PIC - PENANGANAN TIKET
+   PIC dapat melihat daftar tiket yang di-assign kepadanya,
+   mengubah status (Open -> In Progress -> Done), dan menambahkan
+   catatan penanganan.
+
+4. PORTAL ADMIN - MANAJEMEN PENUH
+   Admin memiliki akses ke:
+   - Semua Tiket     : lihat, filter, edit, dan hapus tiket dari
+                       semua user
+   - Routing Rules   : atur otomatisasi assignment tiket ke PIC
+                       berdasarkan aplikasi
+   - Manajemen Pengguna : tambah/edit/hapus akun User dan PIC
+                          beserta passwordnya, dengan dua cara:
+       a. Tambah satu per satu (form modal, langsung input nama,
+          email, departemen/tim, dan password)
+       b. Import massal via file CSV dengan template terpisah
+          untuk User (kolom: email, nama, departemen) dan
+          PIC (kolom: email, nama, team_id), lengkap dengan
+          preview data sebelum dieksekusi dan deteksi duplikat
+          otomatis. Password default di-generate otomatis dan
+          simulasi pengiriman email selamat datang disiapkan.
+   - Manajemen Aplikasi : kelola daftar aplikasi dan kategori
+                          permintaan
+   - Kategori & SLA  : konfigurasi target waktu penyelesaian tiket
+   - Knowledge Base  : artikel panduan untuk user
+
+   MEKANISME AUTO-ROUTING TIKET:
+   Saat tiket baru masuk, sistem secara otomatis menentukan PIC
+   yang bertanggung jawab melalui tiga tahap:
+     Tahap 1 - Deteksi Aplikasi: subject dan isi tiket dicocokkan
+               dengan keyword setiap aplikasi (mis. kata "prosys"
+               -> terdeteksi sebagai [PRJ] - Project System).
+     Tahap 2 - Penentuan Tim: setiap aplikasi memiliki teamId yang
+               menghubungkannya ke satu tim PIC (mis. Project System
+               -> team-ivan). Aplikasi tanpa teamId masuk sebagai
+               Unassigned.
+     Tahap 3 - Pemilihan PIC (Load Balancing): dari seluruh anggota
+               tim (kecuali kepala tim), sistem menghitung jumlah
+               tiket aktif (Open/In Progress/Pending) masing-masing,
+               lalu memilih PIC dengan beban tiket paling sedikit.
+               Jika tim hanya terdiri dari kepala tim, kepala tim
+               langsung yang di-assign.
+   Hasil routing ini (teamId + assignedId) langsung disimpan ke
+   tiket, sehingga PIC yang bersangkutan langsung dapat melihat
+   tiket tersebut di dashboard-nya.
+
+5. NOTIFIKASI EMAIL OTOMATIS
+   Setiap tiket baru yang masuk akan mengirim notifikasi email ke
+   tim IT secara otomatis, sehingga tidak ada permintaan yang
+   terlewat.
+
+6. CUTOFF & REKAP TIKET
+   Fitur eksekusi cutoff periodik: tiket berstatus Done otomatis
+   dipindahkan ke Closed, membersihkan antrian dan menjaga data
+   tetap akurat.
+
+7. LAPORAN MINGGUAN - EXPORT KE POWERPOINT
+   Admin dapat meng-generate laporan mingguan IT Support dalam
+   format .pptx (PowerPoint) yang mencakup:
+   - KPI utama: Total tiket, Closed, Open, Waiting, Closure Rate
+   - Grafik volume tiket harian
+   - Distribusi beban kerja per PIC
+   - Daftar aplikasi dengan tiket terbanyak
+   - Kategori permintaan
+   - Aging tiket (tiket yang belum selesai lebih dari X hari)
+   - Sorotan periode: hari tersibuk, aplikasi teratas, PIC dengan
+     beban tertinggi
+   Laporan ini siap dipresentasikan langsung tanpa perlu diedit
+   ulang.
+
+
+================================================================
+STATUS SISTEM
+================================================================
+
+  Komponen                    Status
+  --------------------------  --------------------------------
+  Login & autentikasi         Selesai
+  Manajemen role (PIC/User)   Selesai
+  Portal User (submit tiket)  Selesai
+  Portal PIC                  Selesai
+  Portal Admin                Selesai
+  Import akun massal (CSV)    Selesai
+  Routing otomatis (AI rule)  Selesai
+  Load balancing PIC          Selesai
+  Notifikasi email            Aktif (simulasi)
+  Knowledge Base              Selesai
+  Cutoff & rekap              Selesai
+  Laporan Mingguan (PPT)      Selesai
+  Penyimpanan data            localStorage (prototipe)
+
+
+================================================================
+CATATAN & RENCANA SELANJUTNYA
+================================================================
+
+Sistem saat ini berjalan sebagai PROTOTIPE FUNGSIONAL - semua data
+disimpan di browser lokal (localStorage), yang artinya cocok untuk
+demonstrasi dan pengujian fitur, namun belum siap untuk penggunaan
+multi-user secara bersamaan.
+
+Untuk implementasi produksi, langkah selanjutnya yang direkomendasikan:
+
+  1. Migrasi ke database terpusat (PostgreSQL / MySQL)
+  2. Hosting di server internal atau cloud perusahaan
+  3. Integrasi dengan Active Directory / SSO perusahaan untuk login
+
+
+================================================================
+
+
+================================================================
+UPDATE PROGRES - 10 Juni 2026
+================================================================
+
+1. MIGRASI DATABASE KE SUPABASE (POSTGRESQL) - TAHAP AWAL
+   Database produksi mulai dipindahkan dari localStorage ke Supabase
+   (PostgreSQL terkelola). Skema tabel inti (teams, pics, profiles,
+   tickets, comments, ticket_timeline, notifications, kb_articles,
+   app_routing, sla_rules, audit_log, dll) beserta Row Level Security
+   sudah berhasil dijalankan dan diverifikasi aktif di Supabase.
+   Data master awal (daftar tim, PIC, SLA rules, app routing, dan
+   artikel Knowledge Base) sudah di-seed ke database.
+
+2. LOGIN SEKARANG MENGGUNAKAN SUPABASE AUTH
+   Proses login tidak lagi memakai akun lokal (localStorage), tapi
+   sudah terhubung ke Supabase Auth (email & password). Setelah
+   login, sistem mengambil data role, nama, Tim, dan ID PIC dari
+   tabel 'profiles' untuk menentukan halaman tujuan (Admin/PIC/User).
+
+3. PERBAIKAN TRIGGER OTOMATIS PEMBUATAN PROFIL (auth-trigger.sql v2)
+   Ditambahkan trigger baru 'on_auth_user_meta_updated' yang otomatis
+   menyinkronkan data profil (role, nama, ID PIC, Tim) setiap kali
+   admin mengubah "User Metadata" akun lewat Supabase Auth. Dengan
+   ini, akun yang sempat salah konfigurasi (mis. role tidak sesuai)
+   bisa diperbaiki cukup lewat edit metadata, tanpa perlu mengubah
+   data di tabel profiles secara manual.
+
+4. TESTING LOGIN BERDASARKAN ROLE
+   - Akun Admin (Viona): berhasil login dan diarahkan ke Portal Admin.
+   - Akun PIC (Leonagata): ditemukan kasus akun PIC yang dibuat tanpa
+     User Metadata lengkap sehingga otomatis dianggap role 'user' dan
+     diarahkan ke Portal User. Penyebab sudah diidentifikasi dan
+     prosedur perbaikannya sudah didokumentasikan di auth-trigger.sql.
+
+CATATAN: Migrasi ke Supabase (poin 1 pada Rencana Selanjutnya di atas)
+sudah berjalan dan sedang dalam tahap pengujian akun per role
+(Admin, PIC, User) sebelum dilanjutkan ke data tiket.
+
+================================================================

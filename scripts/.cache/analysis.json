@@ -1,0 +1,1134 @@
+{
+  "totals": {
+    "total": 286,
+    "withApp": 272,
+    "withPic": 271,
+    "withTask": 261
+  },
+  "newApps": [
+    "[SLS] - Website",
+    "[SLS] - iforte"
+  ],
+  "newPics": [],
+  "newTasks": [
+    "Penambahan Akses User",
+    "Akses User Baru",
+    "Update field",
+    "permintaan Data",
+    "taan perubahan status project code",
+    "Subscription Report",
+    "Akses Company Code",
+    "Hapus Email Blast",
+    "Mapping COA"
+  ],
+  "unassignedAppsCount": 44,
+  "proposals": [
+    {
+      "app": "[PRJ] - Cashflow",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[PRJ] - Cash Advance",
+      "ticketCount": 6,
+      "status": "SUGGEST",
+      "topPic": "Lady Yohana",
+      "topPicCount": 4,
+      "totalPicVotes": 2,
+      "suggestedPicId": "p-lady",
+      "suggestedTeamId": "team-license",
+      "picDistribution": [
+        [
+          "Lady Yohana",
+          4
+        ],
+        [
+          "Leonagata",
+          2
+        ]
+      ]
+    },
+    {
+      "app": "[PRJ] - QVL",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[PRJ] - DMHS",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[PRJ] - DMT Framework",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[PRJ] - HandOver Monitoring",
+      "ticketCount": 2,
+      "status": "SUGGEST",
+      "topPic": "Apri",
+      "topPicCount": 1,
+      "totalPicVotes": 2,
+      "suggestedPicId": "p-apri",
+      "suggestedTeamId": "team-ivan",
+      "picDistribution": [
+        [
+          "Apri",
+          1
+        ],
+        [
+          "Lady Yohana",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[PRJ] - eTender",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[PRJ] - Project Set Up",
+      "ticketCount": 1,
+      "status": "SUGGEST",
+      "topPic": "Nicholas",
+      "topPicCount": 1,
+      "totalPicVotes": 1,
+      "suggestedPicId": "p-nicholas",
+      "suggestedTeamId": "team-nicholas",
+      "picDistribution": [
+        [
+          "Nicholas",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[PRJ] - AP Management",
+      "ticketCount": 1,
+      "status": "SUGGEST",
+      "topPic": "Nicholas",
+      "topPicCount": 1,
+      "totalPicVotes": 1,
+      "suggestedPicId": "p-nicholas",
+      "suggestedTeamId": "team-nicholas",
+      "picDistribution": [
+        [
+          "Nicholas",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[PRJ] - Legal Management System",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[CMN] - Personals",
+      "ticketCount": 8,
+      "status": "SUGGEST",
+      "topPic": "Lady Yohana",
+      "topPicCount": 4,
+      "totalPicVotes": 4,
+      "suggestedPicId": "p-lady",
+      "suggestedTeamId": "team-license",
+      "picDistribution": [
+        [
+          "Lady Yohana",
+          4
+        ],
+        [
+          "Kevin",
+          2
+        ],
+        [
+          "Apri",
+          1
+        ],
+        [
+          "Ivan Tenusa",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[CMN] - Image Uploader",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[CMN] - SMS Campaign",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[CMN] - Document Management",
+      "ticketCount": 1,
+      "status": "SUGGEST",
+      "topPic": "Lady Yohana",
+      "topPicCount": 1,
+      "totalPicVotes": 1,
+      "suggestedPicId": "p-lady",
+      "suggestedTeamId": "team-license",
+      "picDistribution": [
+        [
+          "Lady Yohana",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[CMN] - Procurement",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[CMN] - Business Portal",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[COR] - SIMA",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[COR] - HRG",
+      "ticketCount": 1,
+      "status": "SUGGEST",
+      "topPic": "Joshua K",
+      "topPicCount": 1,
+      "totalPicVotes": 1,
+      "suggestedPicId": "p-joshua",
+      "suggestedTeamId": "team-joshua",
+      "picDistribution": [
+        [
+          "Joshua K",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[SDH] - Burial System",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[SLS] - PP Online",
+      "ticketCount": 1,
+      "status": "SUGGEST",
+      "topPic": "Lady Yohana",
+      "topPicCount": 1,
+      "totalPicVotes": 1,
+      "suggestedPicId": "p-lady",
+      "suggestedTeamId": "team-license",
+      "picDistribution": [
+        [
+          "Lady Yohana",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - Online Selling",
+      "ticketCount": 7,
+      "status": "SUGGEST",
+      "topPic": "Lady Yohana",
+      "topPicCount": 3,
+      "totalPicVotes": 4,
+      "suggestedPicId": "p-lady",
+      "suggestedTeamId": "team-license",
+      "picDistribution": [
+        [
+          "Lady Yohana",
+          3
+        ],
+        [
+          "Apri",
+          2
+        ],
+        [
+          "Ivan Tenusa",
+          1
+        ],
+        [
+          "Kevin",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - Property System",
+      "ticketCount": 72,
+      "status": "SUGGEST",
+      "topPic": "Ivan Tenusa",
+      "topPicCount": 41,
+      "totalPicVotes": 5,
+      "suggestedPicId": "p-ivan",
+      "suggestedTeamId": "team-ivan",
+      "picDistribution": [
+        [
+          "Ivan Tenusa",
+          41
+        ],
+        [
+          "Lady Yohana",
+          19
+        ],
+        [
+          "Kevin",
+          6
+        ],
+        [
+          "Apri",
+          5
+        ],
+        [
+          "Christian",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - Customer Portal",
+      "ticketCount": 1,
+      "status": "SUGGEST",
+      "topPic": "Christian",
+      "topPicCount": 1,
+      "totalPicVotes": 1,
+      "suggestedPicId": "p-christian",
+      "suggestedTeamId": "team-joshua",
+      "picDistribution": [
+        [
+          "Christian",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - Launching System",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[SLS] - Leads Management",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[SLS] - Event Registration",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[SLS] - Bank Portal",
+      "ticketCount": 4,
+      "status": "SUGGEST",
+      "topPic": "Kevin",
+      "topPicCount": 2,
+      "totalPicVotes": 3,
+      "suggestedPicId": "p-kevin",
+      "suggestedTeamId": "team-ivan",
+      "picDistribution": [
+        [
+          "Kevin",
+          2
+        ],
+        [
+          "Lady Yohana",
+          1
+        ],
+        [
+          "Ivan Tenusa",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - FSS Application",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[SLS] - COGS",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[SLS] - Member Activation",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[SLS] - Qontak",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[SLS] - Midtrans",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[SLS] - Dynamics",
+      "ticketCount": 8,
+      "status": "SUGGEST",
+      "topPic": "Lady Yohana",
+      "topPicCount": 8,
+      "totalPicVotes": 1,
+      "suggestedPicId": "p-lady",
+      "suggestedTeamId": "team-license",
+      "picDistribution": [
+        [
+          "Lady Yohana",
+          8
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - Sharepoint",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[RPT] - Report Geneva",
+      "ticketCount": 10,
+      "status": "SUGGEST",
+      "topPic": "Lady Yohana",
+      "topPicCount": 9,
+      "totalPicVotes": 2,
+      "suggestedPicId": "p-lady",
+      "suggestedTeamId": "team-license",
+      "picDistribution": [
+        [
+          "Lady Yohana",
+          9
+        ],
+        [
+          "Apri",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[OTH] - Others",
+      "ticketCount": 1,
+      "status": "SUGGEST",
+      "topPic": "Lady Yohana",
+      "topPicCount": 1,
+      "totalPicVotes": 1,
+      "suggestedPicId": "p-lady",
+      "suggestedTeamId": "team-license",
+      "picDistribution": [
+        [
+          "Lady Yohana",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[BAS] - CCTV",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[BAS] - Access Control",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[BAS] - Boom gate",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[BAS] - Lift",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[BAS] - Intercom",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[BAS] - Network",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[BAS] - Presensi",
+      "ticketCount": 0,
+      "status": "NO_DATA"
+    },
+    {
+      "app": "[BAS] - Others",
+      "ticketCount": 1,
+      "status": "NO_DATA"
+    }
+  ],
+  "matrix": [
+    {
+      "app": "[SLS] - Sales Portal",
+      "tasks": [
+        [
+          "Pengecekan Data",
+          3
+        ],
+        [
+          "Setting Site Plan",
+          2
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - Property System",
+      "tasks": [
+        [
+          "Pengecekan Data",
+          27
+        ],
+        [
+          "Promote Production",
+          9
+        ],
+        [
+          "Bug",
+          6
+        ],
+        [
+          "Manajemen Akses User",
+          5
+        ],
+        [
+          "Setting",
+          4
+        ],
+        [
+          "Request Data On Demand",
+          4
+        ],
+        [
+          "permintaan Data",
+          2
+        ],
+        [
+          "Update field",
+          1
+        ],
+        [
+          "Penambahan Akses User",
+          1
+        ],
+        [
+          "Mapping Budget Cluster",
+          1
+        ],
+        [
+          "Akses Company Code",
+          1
+        ],
+        [
+          "Setting Account Code PP",
+          1
+        ],
+        [
+          "Update Pscode",
+          1
+        ],
+        [
+          "Update Reason Code",
+          1
+        ],
+        [
+          "Change Request",
+          1
+        ],
+        [
+          "Pergantian Bank & Account",
+          1
+        ],
+        [
+          "Setting Skema Item Budget",
+          1
+        ],
+        [
+          "CnC CA Exception",
+          1
+        ],
+        [
+          "Penambahan File Document",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - Commission System",
+      "tasks": [
+        [
+          "Pengecekan Data",
+          10
+        ],
+        [
+          "Setting",
+          5
+        ],
+        [
+          "Setting Pending Proses CPO",
+          2
+        ],
+        [
+          "Change Request",
+          2
+        ],
+        [
+          "Request Data On Demand",
+          1
+        ],
+        [
+          "Bug",
+          1
+        ],
+        [
+          "Replace Document",
+          1
+        ],
+        [
+          "Setting Schema Code",
+          1
+        ],
+        [
+          "Eligible Reward",
+          1
+        ],
+        [
+          "Setting Skema Item Budget",
+          1
+        ],
+        [
+          "Mapping Commission Type",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[PRJ] - Vendor Portal",
+      "tasks": [
+        [
+          "Pengecekan Data",
+          4
+        ],
+        [
+          "Setting",
+          2
+        ],
+        [
+          "Setting PM Name",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[TMD] - Billing System",
+      "tasks": [
+        [
+          "Manajemen Akses User",
+          2
+        ],
+        [
+          "Penambahan Akses User",
+          1
+        ],
+        [
+          "Setting",
+          1
+        ],
+        [
+          "Update field",
+          1
+        ],
+        [
+          "Rollback Jurnal",
+          1
+        ],
+        [
+          "Promote Production",
+          1
+        ],
+        [
+          "Bug",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[CMN] - Personals",
+      "tasks": [
+        [
+          "Akses User Baru",
+          2
+        ],
+        [
+          "Pengecekan Data",
+          2
+        ],
+        [
+          "Penambahan Akses User",
+          1
+        ],
+        [
+          "Pemindahan Kontrak",
+          1
+        ],
+        [
+          "Setting Notifikasi",
+          1
+        ],
+        [
+          "Manajemen Akses User",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - Budget Marketing",
+      "tasks": [
+        [
+          "Reimport",
+          9
+        ],
+        [
+          "Pengecekan Data",
+          7
+        ],
+        [
+          "Setting",
+          4
+        ],
+        [
+          "Manajemen WBS",
+          2
+        ],
+        [
+          "Penambahan Akses User",
+          1
+        ],
+        [
+          "Bug",
+          1
+        ],
+        [
+          "Update Deskripsi",
+          1
+        ],
+        [
+          "Manajemen Approval",
+          1
+        ],
+        [
+          "Replace Document",
+          1
+        ],
+        [
+          "Penambahan Item Budget",
+          1
+        ],
+        [
+          "Mapping COA",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[TMD] - LEAP",
+      "tasks": [
+        [
+          "Setting",
+          1
+        ],
+        [
+          "Pengecekan Data",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[TMD] - Online Payment",
+      "tasks": [
+        [
+          "Reimport",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - Bank Portal",
+      "tasks": [
+        [
+          "Bug",
+          2
+        ],
+        [
+          "Setting",
+          1
+        ],
+        [
+          "Manajemen Akses User",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[PRJ] - Cost Contract",
+      "tasks": [
+        [
+          "Manajemen Akses User",
+          9
+        ],
+        [
+          "Hide Jaminan Kontrak",
+          3
+        ],
+        [
+          "Penambahan Akses User",
+          3
+        ],
+        [
+          "Reimport",
+          2
+        ],
+        [
+          "Open Validation RVO",
+          1
+        ],
+        [
+          "Pengecekan Data",
+          1
+        ],
+        [
+          "Update field",
+          1
+        ],
+        [
+          "Perubahan Lampiran",
+          1
+        ],
+        [
+          "Setting",
+          1
+        ],
+        [
+          "Change Request",
+          1
+        ],
+        [
+          "Cancel DD",
+          1
+        ],
+        [
+          "Update Data & Nama",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[TMD] - Residential Services",
+      "tasks": [
+        [
+          "Manajemen Akses User",
+          4
+        ],
+        [
+          "Pengecekan Data",
+          2
+        ],
+        [
+          "Update Data & Nama",
+          2
+        ],
+        [
+          "Update Field",
+          1
+        ],
+        [
+          "Request Data On Demand",
+          1
+        ],
+        [
+          "Setting",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[BAS] - Others",
+      "tasks": [
+        [
+          "Penambahan Akses User",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[CMN] - Tax System",
+      "tasks": [
+        [
+          "Pengecekan Data",
+          3
+        ],
+        [
+          "Reimport",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[TMD] - eTMD",
+      "tasks": [
+        [
+          "Promote Production",
+          3
+        ],
+        [
+          "Manajemen Approval",
+          2
+        ],
+        [
+          "Setting",
+          1
+        ],
+        [
+          "Manajemen Akses User",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[PRJ] - HandOver Monitoring",
+      "tasks": [
+        [
+          "Pengecekan Data",
+          1
+        ],
+        [
+          "Manajemen Akses User",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[PRJ] - Project System",
+      "tasks": [
+        [
+          "Pengecekan Data",
+          1
+        ],
+        [
+          "Penambahan Akses User",
+          1
+        ],
+        [
+          "taan perubahan status project code",
+          1
+        ],
+        [
+          "Replace Document",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[PRJ] - Cash Advance",
+      "tasks": [
+        [
+          "Manajemen Akses User",
+          4
+        ],
+        [
+          "Penambahan Akses User",
+          1
+        ],
+        [
+          "Pengecekan Data",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[RPT] - Report Geneva",
+      "tasks": [
+        [
+          "Manajemen Akses User",
+          5
+        ],
+        [
+          "Setting Subscription Report",
+          2
+        ],
+        [
+          "Subscription Report",
+          2
+        ],
+        [
+          "Penambahan Akses User",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - PP Online",
+      "tasks": [
+        [
+          "Setting",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[PRJ] - AP Management",
+      "tasks": [
+        [
+          "Setting",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - Dynamics",
+      "tasks": [
+        [
+          "Manajemen Akses User",
+          7
+        ],
+        [
+          "Penambahan Akses User",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[PRJ] - Project Set Up",
+      "tasks": [
+        [
+          "Update Field",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - Online Selling",
+      "tasks": [
+        [
+          "Pergantian Bank & Account",
+          2
+        ],
+        [
+          "Setting COA",
+          1
+        ],
+        [
+          "Setting Pending Proses CPO",
+          1
+        ],
+        [
+          "Setting Site Plan",
+          1
+        ],
+        [
+          "Setting",
+          1
+        ],
+        [
+          "Manajemen Approval",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[CMN] - Email Blast System",
+      "tasks": [
+        [
+          "Setting",
+          1
+        ],
+        [
+          "Hapus Email Blast",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - Siteplan Report",
+      "tasks": [
+        [
+          "Setting Site Plan",
+          2
+        ],
+        [
+          "Update Field",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - Customer Portal",
+      "tasks": [
+        [
+          "Promote Production",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[OTH] - Others",
+      "tasks": [
+        [
+          "Manajemen Akses User",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - Website",
+      "tasks": [
+        [
+          "Setting",
+          1
+        ],
+        [
+          "Update Data & Nama",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[COR] - HRG",
+      "tasks": [
+        [
+          "Setting Notifikasi",
+          1
+        ]
+      ]
+    },
+    {
+      "app": "[SLS] - iforte",
+      "tasks": [
+        [
+          "Pengecekan Data",
+          3
+        ]
+      ]
+    },
+    {
+      "app": "[CMN] - Document Management",
+      "tasks": [
+        [
+          "Pengecekan Data",
+          1
+        ]
+      ]
+    }
+  ]
+}
