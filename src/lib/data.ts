@@ -6,27 +6,27 @@ import type {
 export const company = { name: 'Helpdesk IT', domain: 'helpdesk@lippo.id' };
 
 export const teams: Team[] = [
-  { id: 'team-license', name: 'License Admin', headId: 'p-license', headName: 'License Admin', headEmail: 'license.admin@lippo.id', role: 'owner', memberIds: ['p-lady', 'p-eric', 'p-vio'] },
-  { id: 'team-ivan', name: 'Ivan Tenusa Team', headId: 'p-ivan', headName: 'Ivan Tenusa', headEmail: 'ivan.tenusa@lippo.id', role: 'tech', memberIds: ['p-ivan', 'p-apri', 'p-kevin', 'p-lukas'] },
-  { id: 'team-nicholas', name: 'Nicholas Suryatama Team', headId: 'p-nicholas', headName: 'Nicholas Suryatama', headEmail: 'nicholas.suryatama@lippo.id', role: 'tech', memberIds: ['p-nicholas', 'p-leo'] },
-  { id: 'team-joshua', name: 'Joshua Kartono Team', headId: 'p-joshua', headName: 'Joshua Kartono', headEmail: 'joshua.kartono@lippo.id', role: 'admin', memberIds: ['p-joshua', 'p-christian'] },
-  { id: 'team-andika', name: 'Rachmad Andika Team', headId: 'p-andika', headName: 'Rachmad Andika', headEmail: 'andika@lippoland.id', role: 'admin', memberIds: ['p-andika'] },
+  { id: 'team-license', name: 'License Admin', headId: 'p-license', headName: 'License Admin', headEmail: 'license.admin@ithelpdesk.com', role: 'owner', memberIds: ['p-lady', 'p-eric', 'p-vio'] },
+  { id: 'team-ivan', name: 'Ivan Tenusa Team', headId: 'p-ivan', headName: 'Ivan Tenusa', headEmail: 'ivan.tenusa@ithelpdesk.com', role: 'tech', memberIds: ['p-ivan', 'p-apri', 'p-kevin', 'p-lukas'] },
+  { id: 'team-nicholas', name: 'Nicholas Suryatama Team', headId: 'p-nicholas', headName: 'Nicholas Suryatama', headEmail: 'nicholas.suryatama@ithelpdesk.com', role: 'tech', memberIds: ['p-nicholas', 'p-leo'] },
+  { id: 'team-joshua', name: 'Joshua Kartono Team', headId: 'p-joshua', headName: 'Joshua Kartono', headEmail: 'joshua.kartono@ithelpdesk.com', role: 'admin', memberIds: ['p-joshua', 'p-christian'] },
+  { id: 'team-andika', name: 'Rachmad Andika Team', headId: 'p-andika', headName: 'Rachmad Andika', headEmail: 'andika@ithelpdesk.com', role: 'admin', memberIds: ['p-andika'] },
 ];
 
 export const pics: PIC[] = [
-  { id: 'p-license', name: 'License Admin', initials: 'LA', teamId: 'team-license', isHead: true, email: 'license.admin@lippo.id' },
-  { id: 'p-lady',    name: 'Lady Yohana',   initials: 'LY', teamId: 'team-license', email: 'lady.yohana@lippo.id' },
-  { id: 'p-eric',    name: 'Eric Yonalis',  initials: 'EY', teamId: 'team-license', email: 'eric.yonalis@lippo.id' },
-  { id: 'p-vio',     name: 'Viona',         initials: 'VI', teamId: 'team-license', email: 'viona@lippo.id' },
-  { id: 'p-ivan',  name: 'Ivan Tenusa',    initials: 'IT', teamId: 'team-ivan', isHead: true, email: 'ivan.tenusa@lippo.id', subTeam: 'prosys-budget' },
-  { id: 'p-apri',  name: 'Apri',           initials: 'AP', teamId: 'team-ivan', email: 'apri@lippo.id', subTeam: 'prosys-budget' },
-  { id: 'p-kevin', name: 'Kevin',          initials: 'KV', teamId: 'team-ivan', email: 'kevin@lippo.id', subTeam: 'sales-tax' },
-  { id: 'p-lukas', name: 'Lukas Wijaya K', initials: 'LW', teamId: 'team-ivan', email: 'lukas.wijaya@lippo.id', subTeam: 'sales-tax' },
-  { id: 'p-nicholas', name: 'Nicholas Suryatama', initials: 'NS', teamId: 'team-nicholas', isHead: true, email: 'nicholas.suryatama@lippo.id' },
-  { id: 'p-leo',      name: 'Leonagata',          initials: 'LE', teamId: 'team-nicholas', email: 'leonagata@lippo.id' },
-  { id: 'p-joshua',    name: 'Joshua Kartono', initials: 'JK', teamId: 'team-joshua', isHead: true, email: 'joshua.kartono@lippo.id' },
-  { id: 'p-christian', name: 'Christian',      initials: 'CH', teamId: 'team-joshua', email: 'christian@lippo.id' },
-  { id: 'p-andika', name: 'Rachmad Andika', initials: 'RA', teamId: 'team-andika', isHead: true, email: 'andika@lippoland.id' },
+  { id: 'p-license', name: 'License Admin', initials: 'LA', teamId: 'team-license', isHead: true, email: 'license.admin@ithelpdesk.com' },
+  { id: 'p-lady',    name: 'Lady Yohana',   initials: 'LY', teamId: 'team-license', email: 'lady.yohana@ithelpdesk.com' },
+  { id: 'p-eric',    name: 'Eric Yonalis',  initials: 'EY', teamId: 'team-license', email: 'eric.yonalis@ithelpdesk.com' },
+  { id: 'p-vio',     name: 'Viona',         initials: 'VI', teamId: 'team-license', email: 'viona@ithelpdesk.com' },
+  { id: 'p-ivan',  name: 'Ivan Tenusa',    initials: 'IT', teamId: 'team-ivan', isHead: true, email: 'ivan.tenusa@ithelpdesk.com', subTeam: 'prosys-budget' },
+  { id: 'p-apri',  name: 'Apri',           initials: 'AP', teamId: 'team-ivan', email: 'apri@ithelpdesk.com', subTeam: 'prosys-budget' },
+  { id: 'p-kevin', name: 'Kevin',          initials: 'KV', teamId: 'team-ivan', email: 'kevin@ithelpdesk.com', subTeam: 'sales-tax' },
+  { id: 'p-lukas', name: 'Lukas Wijaya K', initials: 'LW', teamId: 'team-ivan', email: 'lukas.wijaya@ithelpdesk.com', subTeam: 'sales-tax' },
+  { id: 'p-nicholas', name: 'Nicholas Suryatama', initials: 'NS', teamId: 'team-nicholas', isHead: true, email: 'nicholas.suryatama@ithelpdesk.com' },
+  { id: 'p-leo',      name: 'Leonagata',          initials: 'LE', teamId: 'team-nicholas', email: 'leonagata@ithelpdesk.com' },
+  { id: 'p-joshua',    name: 'Joshua Kartono', initials: 'JK', teamId: 'team-joshua', isHead: true, email: 'joshua.kartono@ithelpdesk.com' },
+  { id: 'p-christian', name: 'Christian',      initials: 'CH', teamId: 'team-joshua', email: 'christian@ithelpdesk.com' },
+  { id: 'p-andika', name: 'Rachmad Andika', initials: 'RA', teamId: 'team-andika', isHead: true, email: 'andika@ithelpdesk.com' },
 ];
 
 export const categories: Category[] = [
@@ -248,10 +248,10 @@ export const closeKeywords = [
 ];
 
 export const sampleUsers: SampleUser[] = [
-  { id: 'u-andi', name: 'Andi Pratama',    email: 'andi.pratama@lippo.id', dept: 'Finance' },
+  { id: 'u-andi', name: 'Andi Pratama',    email: 'andi.pratama@ithelpdesk.com', dept: 'Finance' },
   { id: 'u-sari', name: 'Sari Wulandari',  email: 'sari.w@lippo.id',       dept: 'Marketing' },
   { id: 'u-budi', name: 'Budi Santoso',    email: 'budi.s@lippo.id',       dept: 'Marketing' },
-  { id: 'u-dewi', name: 'Dewi Lestari',    email: 'dewi.l@lippo.id',       dept: 'Operations' },
+  { id: 'u-dewi', name: 'Dewi Lestari',    email: 'dewi.l@ithelpdesk.com',       dept: 'Operations' },
   { id: 'u-rian', name: 'Rian Hidayat',    email: 'rian.h@lippo.id',       dept: 'Procurement' },
 ];
 
@@ -260,7 +260,7 @@ export const seedTickets: Ticket[] = [
   {
     id: 'ITLK-20260526-0042',
     subject: 'Bug Cost Contract - tidak bisa generate PO',
-    from: 'andi.pratama@lippo.id',
+    from: 'andi.pratama@ithelpdesk.com',
     fromName: 'Andi Pratama',
     dept: 'Finance',
     cc: ['helpdesk@lippo.id'],
@@ -288,7 +288,7 @@ export const seedTickets: Ticket[] = [
   {
     id: 'ITLK-20260527-0044',
     subject: 'Request akses Sales Portal untuk staff baru',
-    from: 'andi.pratama@lippo.id',
+    from: 'andi.pratama@ithelpdesk.com',
     fromName: 'Andi Pratama',
     dept: 'Finance',
     body: 'Mohon dibantu tambahkan akses Sales Portal untuk staff baru kami: rizky.f@lippo.id. Jabatan Junior Finance Analyst, akses view-only saja. Terima kasih.',
@@ -316,7 +316,7 @@ export const seedTickets: Ticket[] = [
   {
     id: 'ITLK-20260529-0045',
     subject: 'Error export laporan di Property System',
-    from: 'andi.pratama@lippo.id',
+    from: 'andi.pratama@ithelpdesk.com',
     fromName: 'Andi Pratama',
     dept: 'Finance',
     body: 'Pas mau export laporan di Property System muncul error "Export failed: timeout". Sudah dicoba 3x tetap sama. Ini untuk keperluan audit minggu depan.',
@@ -343,7 +343,7 @@ export const seedTickets: Ticket[] = [
   {
     id: 'ITLK-20260525-0039',
     subject: 'Manajemen Akses User - tambah akses Property System',
-    from: 'dewi.l@lippo.id',
+    from: 'dewi.l@ithelpdesk.com',
     fromName: 'Dewi Lestari',
     dept: 'Operations',
     cc: ['helpdesk@lippo.id'],
@@ -376,7 +376,7 @@ export const seedTickets: Ticket[] = [
   {
     id: 'ITLK-20260523-0037',
     subject: 'Mapping Budget Cluster - request periode Q2',
-    from: 'dewi.l@lippo.id',
+    from: 'dewi.l@ithelpdesk.com',
     fromName: 'Dewi Lestari',
     dept: 'Operations',
     cc: ['helpdesk@lippo.id'],

@@ -57,7 +57,16 @@
       "PowerShell(Test-NetConnection *)",
       "Bash(npm uninstall *)",
       "Bash(git -c core.autocrlf=true add .claude/settings.local.json PRODUCT_SPEC.md package-lock.json package.json src/app/admin/page.tsx src/app/api/admin/accounts/route.ts src/lib/admin-accounts.ts src/lib/auth.ts src/lib/data.ts src/lib/master-data.ts tsconfig.tsbuildinfo)",
-      "Bash(git -c core.autocrlf=true commit -q -m ' *)"
+      "Bash(git -c core.autocrlf=true commit -q -m ' *)",
+      "Bash(py .claude/skills/webapp-testing/scripts/with_server.py --help)",
+      "Bash(curl *)",
+      "Bash(NODE_PATH=\"/c/Users/viona.suchita.os/AppData/Local/npm-cache/_npx/aa1f6563a672b75d/node_modules\" node .pwtest/revert-login-check.js)",
+      "Bash(npx --no-install playwright --version)",
+      "Bash(NODE_PATH=\"/c/Users/viona.suchita.os/AppData/Local/npm-cache/_npx/e41f203b7505f1fb/node_modules\" node .pwtest/revert-login-check.js)",
+      "Bash(git status *)",
+      "Bash(grep -n \"pwtest\\\\|scheduled_tasks\" .gitignore)",
+      "Bash(git check-ignore *)",
+      "Bash(git -c core.autocrlf=true commit -q -m \"feat: ganti domain email seed accounts ke @ithelpdesk.com\")"
     ]
   },
   "hooks": {
