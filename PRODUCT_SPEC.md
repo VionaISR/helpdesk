@@ -1,7 +1,7 @@
 # IT Helpdesk — Product Specification
 
 > **Status:** v4 — Post-Stakeholder Review Revision  
-> **Stack:** Next.js 15 · TypeScript · Supabase (Auth + DB + Realtime) · Resend  
+> **Stack:** Next.js 15 · TypeScript · localStorage (client-side data store, prototype) · Resend  
 > **Terakhir diperbarui:** 2026-05-31
 
 ---
@@ -780,10 +780,8 @@ Response:
 ```
 Frontend    : Next.js 15 (App Router) + TypeScript
 Styling     : CSS Custom Properties
-Database    : Supabase Postgres
-Auth        : Supabase Auth (email + password)
-Realtime    : Supabase Realtime
-File Upload : Supabase Storage
+Data Store  : Browser localStorage (prototype — belum ada backend database)
+Auth        : Local session (email lookup terhadap akun terdaftar, localStorage)
 Email       : Resend (3.000 email/bulan gratis)
 Deploy      : Netlify
 ```
@@ -820,9 +818,8 @@ src/
 │   ├── timeline/
 │   └── sla-indicator/
 ├── lib/
-│   ├── supabase/
-│   │   ├── client.ts
-│   │   └── server.ts
+│   ├── data.ts                 # Static seed data
+│   ├── master-data.ts          # localStorage-backed master data (teams, PIC, apps, SLA, KB)
 │   ├── auth.ts
 │   ├── routing-engine.ts      # Auto-route logic
 │   └── sla-calculator.ts
@@ -864,10 +861,6 @@ Channel: notifications-[team_id] → Team-wide notification
 ## 13. Environment Variables
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=helpdesk@lippoland.id
 

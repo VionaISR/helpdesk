@@ -1,10 +1,21 @@
 import type { Session, UserRole } from '@/types';
-import { supabase } from '@/lib/supabase';
+import { SEED_ACCOUNTS } from '@/lib/account-store';
+import { userStore } from '@/lib/user-store';
+import { pics } from '@/lib/data';
 
 const SESSION_KEY = 'itlk_session';
 
 function isBrowser(): boolean {
   return typeof window !== 'undefined';
+}
+
+function initialsFromName(name: string): string {
+  return name
+    .split(/\s+/)
+    .map(w => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 }
 
 export async function login(
@@ -13,45 +24,27 @@ export async function login(
 ): Promise<{ ok: true; session: Session } | { ok: false; error: string }> {
   const lower = email.toLowerCase().trim();
 
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email: lower,
-    password,
-  });
-
-  if (authError) {
-    const msg = authError.message.toLowerCase();
-    if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
-      return { ok: false, error: 'Email atau password salah. Coba lagi atau hubungi admin.' };
-    }
-    return { ok: false, error: authError.message };
+  if (!password) {
+    return { ok: false, error: 'Email atau password salah. Coba lagi atau hubungi admin.' };
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('name, role, pic_id, team_id, initials')
-    .eq('id', authData.user.id)
-    .single();
+  const seedAccount = SEED_ACCOUNTS.find(a => a.email.toLowerCase() === lower);
+  const registered = userStore.findByEmail(lower);
 
-  if (profileError || !profile) {
-    await supabase.auth.signOut();
-    return { ok: false, error: 'Profil akun tidak ditemukan. Hubungi admin IT.' };
+  if (!seedAccount && !registered) {
+    return { ok: false, error: 'Email atau password salah. Coba lagi atau hubungi admin.' };
   }
 
-  const initials =
-    profile.initials ||
-    profile.name
-      .split(/\s+/)
-      .map((w: string) => w[0])
-      .join('')
-      .slice(0, 2)
-      .toUpperCase();
+  const name = seedAccount?.name ?? registered!.name;
+  const role: UserRole = (seedAccount?.role ?? registered!.role) as UserRole;
+  const picRecord = pics.find(p => p.email.toLowerCase() === lower);
 
   const session: Session = {
     email: lower,
-    name: profile.name,
-    role: profile.role as UserRole,
-    picId: profile.pic_id ?? null,
-    initials,
+    name,
+    role,
+    picId: picRecord?.id ?? null,
+    initials: picRecord?.initials ?? initialsFromName(name),
     loginAt: new Date().toISOString(),
   };
 
@@ -73,7 +66,6 @@ export function getSession(): Session | null {
 
 export function logout(): void {
   if (isBrowser()) localStorage.removeItem(SESSION_KEY);
-  supabase.auth.signOut();
 }
 
 export function getRedirectUrl(role: UserRole): string {

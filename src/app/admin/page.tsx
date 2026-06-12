@@ -1196,7 +1196,7 @@ function ImportPenggunaPage({ onPicChange }: { onPicChange: () => Promise<void> 
 
           <div style={{ marginBottom: 16, padding: 12, background: 'var(--surface-2)', borderRadius: 6, fontSize: 12, color: 'var(--text-muted)' }}>
             <strong>Catatan:</strong> Ini prototype — email disimulaikan (tidak benar-benar terkirim). Untuk production, integrasikan EmailJS welcome template atau Resend API.
-            Akun yang berhasil (✓) sudah benar-benar dibuat di Supabase Auth dan bisa langsung login dengan email + password default di atas.
+            Akun yang berhasil (✓) sudah terdaftar di sistem dan bisa langsung login dengan email tersebut (password apa saja, sesuai mode prototype ini).
           </div>
 
           <div className="card" style={{ marginBottom: 16 }}>
