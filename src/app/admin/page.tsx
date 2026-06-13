@@ -3,15 +3,15 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSession, logout } from '@/lib/auth';
-import { ticketStore } from '@/lib/store';
-import { userStore } from '@/lib/user-store';
+import { useTickets, updateTicketFields, deleteTicket, deleteTickets } from '@/lib/ticket-store';
 import { SEED_ACCOUNTS } from '@/lib/account-store';
 import { adminCreateAccount, adminUpdateAccount, adminDeleteAccount } from '@/lib/admin-accounts';
+import { sendWelcomeEmail } from '@/lib/email';
 import { specificTasks, sampleUsers } from '@/lib/data';
 import { formatDate, statusClass, slaProgress } from '@/lib/utils';
-import { useMasterData, createPic, updatePic, deactivatePic, createCategory, updateCategory, deleteCategory, nextColor, createApp, updateApp, deleteApp, setAppPic, updateSlaRule, createKbArticle, updateKbArticle, deleteKbArticle, fetchUserProfiles, type UserProfile } from '@/lib/master-data';
+import { useMasterData, createPic, updatePic, deactivatePic, createCategory, updateCategory, deleteCategory, nextColor, createApp, updateApp, deleteApp, setAppPic, updateSlaRule, createKbArticle, updateKbArticle, deleteKbArticle, fetchUserProfiles, fetchAppUsers, markAppUserEmailSent, type UserProfile } from '@/lib/master-data';
 import { seedTickets } from '@/lib/data';
-import type { Ticket, Session, PIC, Category, App, Team, SlaRule, KBArticle } from '@/types';
+import type { Ticket, TicketStatus, Session, PIC, Category, App, Team, SlaRule, KBArticle } from '@/types';
 
 const SEED_TICKET_IDS = new Set(seedTickets.map(t => t.id));
 
@@ -82,6 +82,35 @@ function NavItem({ label, count, active, onClick }: { label: string; count?: num
   );
 }
 
+// ─── METRIC HELPERS (real numbers, computed from ticket data) ──────────────────
+// Resolution time in hours (createdAt → resolvedAt); null if not resolved.
+function resolutionHours(t: Ticket): number | null {
+  if (!t.resolvedAt) return null;
+  return (new Date(t.resolvedAt).getTime() - new Date(t.createdAt).getTime()) / 3600000;
+}
+// Did the ticket meet its SLA? resolved → by deadline; still open → not past it yet.
+// null when there's no deadline to judge against.
+function metSla(t: Ticket): boolean | null {
+  if (!t.slaDeadline) return null;
+  const due = new Date(t.slaDeadline).getTime();
+  if (t.resolvedAt) return new Date(t.resolvedAt).getTime() <= due;
+  return Date.now() <= due;
+}
+function avg(nums: number[]): number | null {
+  return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+}
+function fmtHours(h: number | null): string {
+  if (h == null) return '–';
+  return h < 1 ? `${Math.round(h * 60)} min` : `${h.toFixed(1)} jam`;
+}
+function slaCompliancePct(tickets: Ticket[]): number | null {
+  const judged = tickets.map(metSla).filter((v): v is boolean => v !== null);
+  return judged.length ? Math.round((judged.filter(Boolean).length / judged.length) * 100) : null;
+}
+function sameMonth(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
+}
+
 // ─── DASHBOARD PAGE ────────────────────────────────────────────────────────────
 function DashboardPage({ tickets, allCategories }: { tickets: Ticket[]; allCategories: Category[] }) {
   const totalTickets = tickets.length;
@@ -89,15 +118,36 @@ function DashboardPage({ tickets, allCategories }: { tickets: Ticket[]; allCateg
   const slaBreaches = tickets.filter(t => slaProgress(t.createdAt, t.slaDeadline).breached && ['Open','In Progress','Pending','Revisi'].includes(t.status)).length;
   const categoryVolume = allCategories.map(c => ({ ...c, count: tickets.filter(t => t.category === c.id).length }));
   const maxVolume = Math.max(...categoryVolume.map(c => c.count), 1);
-  const weeklyData = [{ day:'Sen',count:4 },{ day:'Sel',count:7 },{ day:'Rab',count:5 },{ day:'Kam',count:9 },{ day:'Jum',count:6 },{ day:'Sab',count:2 },{ day:'Min',count:1 }];
-  const maxDay = Math.max(...weeklyData.map(d => d.count));
+  const slaCompliance = slaCompliancePct(tickets);
+
+  // Month-over-month volume trend (real).
+  const now = new Date();
+  const thisMonth = tickets.filter(t => sameMonth(new Date(t.createdAt), now)).length;
+  const lastMonthRef = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonth = tickets.filter(t => sameMonth(new Date(t.createdAt), lastMonthRef)).length;
+  const momPct = lastMonth ? Math.round(((thisMonth - lastMonth) / lastMonth) * 100) : null;
+
+  // Real volume for the last 7 days.
+  const dayNames = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'];
+  const weeklyData = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (6 - i));
+    const next = new Date(d); next.setDate(d.getDate() + 1);
+    const count = tickets.filter(t => { const c = new Date(t.createdAt); return c >= d && c < next; }).length;
+    return { day: dayNames[d.getDay()], count };
+  });
+  const maxDay = Math.max(...weeklyData.map(d => d.count), 1);
+
+  // CSAT from real ratings (fills in once ticket.csat is saved).
+  const csatValues = tickets.map(t => t.csat).filter((v): v is number => typeof v === 'number');
+  const csatAvg = avg(csatValues);
+  const csatDist = [5, 4, 3, 2, 1].map(n => csatValues.filter(v => v === n).length);
 
   return (
     <div>
       <div className="stat-grid">
-        <div className="stat"><div className="stat-label">Total tiket</div><div className="stat-value">{totalTickets}</div><div className="stat-trend up">+12% dari bulan lalu</div></div>
+        <div className="stat"><div className="stat-label">Total tiket</div><div className="stat-value">{totalTickets}</div><div className={`stat-trend ${momPct != null && momPct < 0 ? 'down' : 'up'}`}>{momPct == null ? `${thisMonth} bulan ini` : `${momPct >= 0 ? '+' : ''}${momPct}% dari bulan lalu`}</div></div>
         <div className="stat"><div className="stat-label">Tiket aktif</div><div className="stat-value">{openTickets}</div><div className="stat-trend">Sedang ditangani</div></div>
-        <div className="stat"><div className="stat-label">SLA compliance</div><div className="stat-value">94%</div><div className="stat-trend up">Target: 90%</div></div>
+        <div className="stat"><div className="stat-label">SLA compliance</div><div className="stat-value">{slaCompliance == null ? '–' : `${slaCompliance}%`}</div><div className="stat-trend up">Target: 90%</div></div>
         <div className="stat"><div className="stat-label">SLA breach</div><div className="stat-value">{slaBreaches}</div><div className="stat-trend down">Perlu eskalasi</div></div>
       </div>
 
@@ -119,15 +169,16 @@ function DashboardPage({ tickets, allCategories }: { tickets: Ticket[]; allCateg
         <div className="card">
           <div className="card-header"><div className="card-title">CSAT Rating</div><div className="card-subtitle">Rata-rata kepuasan user</div></div>
           <div className="card-body" style={{ textAlign:'center', padding:'24px 20px' }}>
-            <div style={{ fontSize:48, fontWeight:600, letterSpacing:'-0.03em', lineHeight:1 }}>4.6<span style={{ fontSize:24, color:'var(--text-muted)' }}>/5</span></div>
-            <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:8 }}>Dari 142 rating</div>
+            <div style={{ fontSize:48, fontWeight:600, letterSpacing:'-0.03em', lineHeight:1 }}>{csatAvg == null ? '–' : csatAvg.toFixed(1)}<span style={{ fontSize:24, color:'var(--text-muted)' }}>/5</span></div>
+            <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:8 }}>{csatValues.length === 0 ? 'Belum ada rating' : `Dari ${csatValues.length} rating`}</div>
             <div style={{ marginTop:16, display:'flex', flexDirection:'column', gap:6 }}>
-              {[5,4,3,2,1].map(n => (
+              {[5,4,3,2,1].map((n, idx) => (
                 <div key={n} style={{ display:'flex', alignItems:'center', gap:8, fontSize:11 }}>
                   <span style={{ width:12 }}>{n}</span>
                   <div style={{ flex:1, height:6, background:'var(--surface-2)', borderRadius:3, overflow:'hidden' }}>
-                    <div style={{ width: n===5?'72%':n===4?'20%':n===3?'5%':'2%', height:'100%', background:'var(--accent)' }}></div>
+                    <div style={{ width: `${csatValues.length ? (csatDist[idx] / csatValues.length) * 100 : 0}%`, height:'100%', background:'var(--accent)' }}></div>
                   </div>
+                  <span style={{ width:18, textAlign:'right', color:'var(--text-muted)' }}>{csatDist[idx]}</span>
                 </div>
               ))}
             </div>
@@ -155,36 +206,59 @@ function DashboardPage({ tickets, allCategories }: { tickets: Ticket[]; allCateg
 }
 
 // ─── REPORTING ─────────────────────────────────────────────────────────────────
-function ReportingPage({ allPics }: { allPics: PIC[] }) {
+function ReportingPage({ allPics, tickets }: { allPics: PIC[]; tickets: Ticket[] }) {
+  const resolved = tickets.filter(t => ['Done', 'Closed'].includes(t.status));
+  const active = tickets.filter(t => ['Open', 'In Progress', 'Pending', 'Revisi'].includes(t.status));
+  const avgResolution = avg(resolved.map(resolutionHours).filter((v): v is number => v != null));
+  const sla = slaCompliancePct(tickets);
+
+  const picRows = allPics
+    .map(p => {
+      const own = tickets.filter(t => t.assignedToId === p.id);
+      const done = own.filter(t => ['Done', 'Closed'].includes(t.status));
+      const resHours = done.map(resolutionHours).filter((v): v is number => v != null);
+      const csat = own.map(t => t.csat).filter((v): v is number => typeof v === 'number');
+      return {
+        pic: p,
+        assigned: own.length,
+        done: done.length,
+        avgRes: avg(resHours),
+        sla: slaCompliancePct(done),
+        csat: csat.length ? avg(csat) : null,
+      };
+    })
+    .filter(r => r.assigned > 0)
+    .sort((a, b) => b.done - a.done);
+
   return (
     <div>
-      <div className="filters">
-        <select className="filter-select"><option>Bulan ini</option><option>Bulan lalu</option><option>3 bulan terakhir</option></select>
-        <select className="filter-select"><option>Semua PIC</option>{allPics.map(p => <option key={p.id}>{p.name}</option>)}</select>
-        <button className="btn btn-secondary btn-sm">Apply</button>
-      </div>
       <div className="stat-grid">
-        <div className="stat"><div className="stat-label">Avg response time</div><div className="stat-value">12<span style={{ fontSize:14, color:'var(--text-muted)' }}> min</span></div><div className="stat-trend up">-3 min vs bulan lalu</div></div>
-        <div className="stat"><div className="stat-label">Avg resolution time</div><div className="stat-value">3.2<span style={{ fontSize:14, color:'var(--text-muted)' }}> jam</span></div><div className="stat-trend">Stable</div></div>
-        <div className="stat"><div className="stat-label">Reopen rate</div><div className="stat-value">4.1%</div><div className="stat-trend down">-1.2% vs bulan lalu</div></div>
-        <div className="stat"><div className="stat-label">First-time resolution</div><div className="stat-value">87%</div><div className="stat-trend up">+2%</div></div>
+        <div className="stat"><div className="stat-label">Tiket selesai</div><div className="stat-value">{resolved.length}</div><div className="stat-trend">dari {tickets.length} total</div></div>
+        <div className="stat"><div className="stat-label">Avg resolution time</div><div className="stat-value">{fmtHours(avgResolution)}</div><div className="stat-trend">semua waktu</div></div>
+        <div className="stat"><div className="stat-label">SLA compliance</div><div className="stat-value">{sla == null ? '–' : `${sla}%`}</div><div className="stat-trend">Target: 90%</div></div>
+        <div className="stat"><div className="stat-label">Tiket aktif</div><div className="stat-value">{active.length}</div><div className="stat-trend">belum selesai</div></div>
       </div>
       <div className="card">
-        <div className="card-header"><div className="card-title">Performa PIC</div><div className="card-subtitle">Bulan ini</div></div>
-        <table className="table">
-          <thead><tr><th>PIC</th><th>Tiket selesai</th><th>Avg resolution</th><th>SLA compliance</th><th>CSAT</th></tr></thead>
-          <tbody>
-            {allPics.slice(0,4).map((p,i) => (
-              <tr key={p.id}>
-                <td><div style={{ display:'flex', alignItems:'center', gap:10 }}><div className="user-avatar" style={{ width:24, height:24, fontSize:10 }}>{p.initials}</div><div><div style={{ fontWeight:500 }}>{p.name}</div></div></div></td>
-                <td>{[42,38,35,29][i]}</td>
-                <td>{['2.8 jam','3.1 jam','2.4 jam','4.2 jam'][i]}</td>
-                <td><span style={{ fontWeight:500, color: i===3?'var(--priority-medium)':'var(--status-done)' }}>{[96,94,98,88][i]}%</span></td>
-                <td>{[4.7,4.5,4.8,4.3][i]} / 5</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="card-header"><div className="card-title">Performa PIC</div><div className="card-subtitle">Semua waktu · {picRows.length} PIC dengan tiket</div></div>
+        {picRows.length === 0 ? (
+          <div className="card-body" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Belum ada tiket yang ditugaskan ke PIC.</div>
+        ) : (
+          <table className="table">
+            <thead><tr><th>PIC</th><th>Ditugaskan</th><th>Selesai</th><th>Avg resolution</th><th>SLA compliance</th><th>CSAT</th></tr></thead>
+            <tbody>
+              {picRows.map(r => (
+                <tr key={r.pic.id}>
+                  <td><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><div className="user-avatar" style={{ width: 24, height: 24, fontSize: 10 }}>{r.pic.initials}</div><div style={{ fontWeight: 500 }}>{r.pic.name}</div></div></td>
+                  <td>{r.assigned}</td>
+                  <td>{r.done}</td>
+                  <td>{fmtHours(r.avgRes)}</td>
+                  <td>{r.sla == null ? '–' : <span style={{ fontWeight: 500, color: r.sla >= 90 ? 'var(--status-done)' : 'var(--priority-medium)' }}>{r.sla}%</span>}</td>
+                  <td>{r.csat == null ? '–' : `${r.csat.toFixed(1)} / 5`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
@@ -387,7 +461,7 @@ function TicketEditModal({ ticket, onChange, onSave, onClose, allPics, allCatego
 }
 
 // ─── ALL TICKETS ───────────────────────────────────────────────────────────────
-function AllTicketsPage({ tickets, setTickets, allPics, allCategories, allTeams, allApps, allSlaRules }: { tickets: Ticket[]; setTickets: React.Dispatch<React.SetStateAction<Ticket[]>>; allPics: PIC[]; allCategories: Category[]; allTeams: Team[]; allApps: App[]; allSlaRules: SlaRule[] }) {
+function AllTicketsPage({ tickets, setTickets, allPics, allCategories, allTeams, allApps, allSlaRules, baseFilter }: { tickets: Ticket[]; setTickets: React.Dispatch<React.SetStateAction<Ticket[]>>; allPics: PIC[]; allCategories: Category[]; allTeams: Team[]; allApps: App[]; allSlaRules: SlaRule[]; baseFilter?: TicketStatus[] }) {
   const [editTarget, setEditTarget] = useState<Ticket | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -395,50 +469,52 @@ function AllTicketsPage({ tickets, setTickets, allPics, allCategories, allTeams,
   const [filterPic, setFilterPic] = useState('');
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
+  const statusOptions = baseFilter ?? ['Open','In Progress','Pending','Revisi','Done','Closed'];
+
   let visible = tickets;
+  if (baseFilter) visible = visible.filter(t => baseFilter.includes(t.status));
   if (search.trim()) { const q = search.toLowerCase(); visible = visible.filter(t => t.subject.toLowerCase().includes(q)||t.id.toLowerCase().includes(q)||t.fromName.toLowerCase().includes(q)); }
   if (filterStatus) visible = visible.filter(t => t.status === filterStatus);
   if (filterCat) visible = visible.filter(t => t.category === filterCat);
   if (filterPic) visible = visible.filter(t => t.assignedToId === filterPic);
 
 
-  const saveEdit = (updated: Ticket) => {
+  const saveEdit = async (updated: Ticket) => {
     const now = new Date().toISOString();
     const prev = tickets.find(t => t.id === updated.id);
     const statusChanged = prev?.status !== updated.status;
     const merged: Ticket = { ...updated, updatedAt: now, resolvedAt: (['Done','Closed'].includes(updated.status) && !updated.resolvedAt) ? now : updated.resolvedAt, activity: statusChanged ? [...(updated.activity||[]), { type:'system', time:now, text:`Status: ${prev?.status} → ${updated.status} (Manual Admin)` }] : updated.activity };
-    ticketStore.update(merged.id, merged);
     setTickets(prev => prev.map(t => t.id === merged.id ? merged : t));
     setEditTarget(null);
+    await updateTicketFields(merged.id, merged);
   };
 
-  const closeSingle = (id: string, e: React.MouseEvent) => {
+  const closeSingle = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const now = new Date().toISOString();
     const t = tickets.find(t => t.id === id);
     if (!t) return;
     const merged: Ticket = { ...t, status:'Closed', updatedAt:now, resolvedAt:t.resolvedAt||now, activity:[...(t.activity||[]),{ type:'system',time:now,text:`Status: ${t.status} → Closed (Manual Admin)` }] };
-    ticketStore.update(id, merged);
     setTickets(prev => prev.map(x => x.id===id?merged:x));
+    await updateTicketFields(id, merged);
   };
 
   const deleteSingle = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setConfirmState({
       message: 'Hapus tiket ini?',
-      onConfirm: () => { ticketStore.remove(id); setTickets(prev => prev.filter(x => x.id !== id)); },
+      onConfirm: () => { setTickets(prev => prev.filter(x => x.id !== id)); deleteTicket(id); },
     });
   };
 
   const deleteNonSeed = () => {
-    const nonSeedCount = tickets.filter(t => !SEED_TICKET_IDS.has(t.id)).length;
-    if (nonSeedCount === 0) return;
+    const nonSeedIds = tickets.filter(t => !SEED_TICKET_IDS.has(t.id)).map(t => t.id);
+    if (nonSeedIds.length === 0) return;
     setConfirmState({
-      message: `Hapus ${nonSeedCount} tiket non-seed? Tiket seed (5) tetap aman.`,
+      message: `Hapus ${nonSeedIds.length} tiket non-seed? Tiket seed (5) tetap aman.`,
       onConfirm: () => {
-        const kept = tickets.filter(t => SEED_TICKET_IDS.has(t.id));
-        ticketStore.saveAll(kept);
-        setTickets(kept);
+        setTickets(prev => prev.filter(t => SEED_TICKET_IDS.has(t.id)));
+        deleteTickets(nonSeedIds);
       },
     });
   };
@@ -447,7 +523,7 @@ function AllTicketsPage({ tickets, setTickets, allPics, allCategories, allTeams,
     <div>
       <div className="filters">
         <input className="filter-input" placeholder="Cari tiket..." value={search} onChange={e => setSearch(e.target.value)} />
-        <select className="filter-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}><option value="">Semua status</option>{['Open','In Progress','Pending','Revisi','Done','Closed'].map(s=><option key={s} value={s}>{s}</option>)}</select>
+        <select className="filter-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}><option value="">Semua status</option>{statusOptions.map(s=><option key={s} value={s}>{s}</option>)}</select>
         <select className="filter-select" value={filterCat} onChange={e => setFilterCat(e.target.value)}><option value="">Semua kategori</option>{allCategories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
         <select className="filter-select" value={filterPic} onChange={e => setFilterPic(e.target.value)}><option value="">Semua PIC</option>{allPics.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
         {tickets.some(t => !SEED_TICKET_IDS.has(t.id)) && (
@@ -999,12 +1075,12 @@ function ImportPenggunaPage({ onPicChange }: { onPicChange: () => Promise<void> 
 
   const handleFile = (file: File) => {
     const reader = new FileReader();
-    reader.onload = e => {
+    reader.onload = async e => {
       const text = e.target?.result as string;
       const parsed = parseCsv(text, activeTab);
       if (!parsed.length) { alert('File tidak valid atau kosong. Pastikan format CSV sesuai template.'); return; }
       // mark duplicates
-      const existing = userStore.getAll().map(u => u.email.toLowerCase());
+      const existing = (await fetchAppUsers()).map(u => u.email.toLowerCase());
       const marked = parsed.map(r => ({
         ...r,
         status: existing.includes(r.email.toLowerCase()) ? 'duplicate' : 'pending',
@@ -1048,15 +1124,10 @@ function ImportPenggunaPage({ onPicChange }: { onPicChange: () => Promise<void> 
           });
           if (!result.ok) throw new Error(result.error);
         }
-        userStore.addMany([{
-          id: `u-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          email: row.email, name: row.name, dept: row.dept,
-          role: row.role, teamId: row.teamId || undefined,
-          defaultPassword: row.defaultPassword,
-          registeredAt: new Date().toISOString(), emailSent: false,
-        }]);
-        userStore.markEmailSent(row.email);
-        updated[idx] = { ...updated[idx], status: 'success' };
+        // Actually email the credentials; only flag email_sent if it really sent.
+        const mail = await sendWelcomeEmail({ toEmail: row.email, toName: row.name, password: row.defaultPassword, role: row.role });
+        if (mail.ok) await markAppUserEmailSent(row.email);
+        updated[idx] = { ...updated[idx], status: 'success', errorMsg: mail.ok ? undefined : `Akun dibuat, email gagal: ${mail.reason}` };
       } catch (err) {
         updated[idx] = { ...updated[idx], status: 'error', errorMsg: err instanceof Error ? err.message : 'Gagal mendaftarkan' };
       }
@@ -1185,8 +1256,8 @@ function ImportPenggunaPage({ onPicChange }: { onPicChange: () => Promise<void> 
           </div>
 
           <div style={{ marginBottom: 16, padding: 12, background: 'var(--surface-2)', borderRadius: 6, fontSize: 12, color: 'var(--text-muted)' }}>
-            <strong>Catatan:</strong> Ini prototype — email disimulaikan (tidak benar-benar terkirim). Untuk production, integrasikan EmailJS welcome template atau Resend API.
-            Akun yang berhasil (✓) sudah terdaftar di sistem dan bisa langsung login dengan email tersebut (password apa saja, sesuai mode prototype ini).
+            <strong>Catatan:</strong> Akun yang berhasil (✓) sudah terdaftar dan bisa langsung login dengan email + password di tabel ini (password kini diverifikasi via Supabase Auth — tidak lagi bebas).
+            Email kredensial dikirim otomatis via EmailJS jika <code>NEXT_PUBLIC_EMAILJS_ENABLED=true</code> dan <code>NEXT_PUBLIC_EMAILJS_WELCOME_TEMPLATE_ID</code> sudah diset; kalau belum, bagikan password manual dari tabel ini.
           </div>
 
           <div className="card" style={{ marginBottom: 16 }}>
@@ -1290,6 +1361,8 @@ function UsersPage({ tickets, allPics, onPicChange }: { tickets: Ticket[]; allPi
     try {
       await createPic({ id: picId, name, email, initials });
       await onPicChange();
+      const mail = await sendWelcomeEmail({ toEmail: email, toName: name, password, role: 'pic' });
+      if (!mail.ok) alert(`Akun PIC dibuat & bisa langsung login. Tapi email kredensial gagal terkirim (${mail.reason}).\n\nBagikan manual ke ${email}\nPassword: ${password}`);
       setShowAddPIC(false);
       setPicForm({ name: '', email: '', password: '' });
       setFormError('');
@@ -1309,6 +1382,8 @@ function UsersPage({ tickets, allPics, onPicChange }: { tickets: Ticket[]; allPi
     const result = await adminCreateAccount({ email, password, name, role: 'user', dept });
     if (!result.ok) { setUserFormError(result.error); return; }
     await refreshUserProfiles();
+    const mail = await sendWelcomeEmail({ toEmail: email, toName: name, password, role: 'user' });
+    if (!mail.ok) alert(`Akun dibuat & bisa langsung login. Tapi email kredensial gagal terkirim (${mail.reason}).\n\nBagikan manual ke ${email}\nPassword: ${password}`);
     setShowAddUser(false);
     setUserForm({ name: '', email: '', dept: '', password: '' });
     setUserFormError('');
@@ -1541,13 +1616,13 @@ function CutoffPage({ tickets, setTickets }: { tickets: Ticket[]; setTickets: Re
 
   const executeCutoff = () => {
     const now = new Date().toISOString();
-    setTickets(prev => {
-      const next = prev.map(t => t.status==='Done' ? { ...t, status:'Closed' as const, updatedAt:now, activity:[...(t.activity||[]),{ type:'system' as const,time:now,text:'Status: Done → Closed (Cutoff by Admin)' }] } : t);
-      ticketStore.saveAll(next);
-      return next;
-    });
+    const toClose = tickets.filter(t => t.status === 'Done');
+    setTickets(prev => prev.map(t => t.status==='Done' ? { ...t, status:'Closed' as const, updatedAt:now, activity:[...(t.activity||[]),{ type:'system' as const,time:now,text:'Status: Done → Closed (Cutoff by Admin)' }] } : t));
     setCutoffDone(true);
     setShowConfirm(false);
+    toClose.forEach(t => {
+      updateTicketFields(t.id, { status: 'Closed', updatedAt: now, activity: [...(t.activity||[]), { type:'system', time:now, text:'Status: Done → Closed (Cutoff by Admin)' }] });
+    });
   };
 
   return (
@@ -2213,7 +2288,7 @@ export default function AdminPage() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [page, setPage] = useState('dashboard');
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const { tickets, setTickets, loading: ticketsLoading } = useTickets();
 
   const { teams: allTeams, pics: allPics, categories: allCategories, apps: allApps, slaRules: allSlaRules, kbArticles: allKbArticles, loading: masterLoading, refresh: refreshMasterData } = useMasterData();
 
@@ -2221,20 +2296,11 @@ export default function AdminPage() {
     const s = getSession();
     if (!s || s.role !== 'admin') { router.replace('/login'); return; }
     setSession(s);
-    setTickets(ticketStore.getAll());
   }, [router]);
 
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === ticketStore.KEY) setTickets(ticketStore.getAll());
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
+  if (!session || masterLoading || ticketsLoading) return null;
 
-  if (!session || masterLoading) return null;
-
-  const pageTitle: Record<string, string> = { dashboard:'Dashboard', reporting:'Reporting & Analytics', kb:'Knowledge Base', tickets:'Semua Tiket', routing:'Routing Rules', apps:'Manajemen Aplikasi', config:'Kategori & SLA', users:'Manajemen Pengguna', import:'Import Pengguna', cutoff:'Cutoff & Rekap Tiket', 'weekly-report':'Laporan Mingguan' };
+  const pageTitle: Record<string, string> = { dashboard:'Dashboard', reporting:'Reporting & Analytics', kb:'Knowledge Base', tickets:'Semua Tiket', 'tickets-closed':'Tiket Closed', routing:'Routing Rules', apps:'Manajemen Aplikasi', config:'Kategori & SLA', users:'Manajemen Pengguna', import:'Import Pengguna', cutoff:'Cutoff & Rekap Tiket', 'weekly-report':'Laporan Mingguan' };
 
   return (
     <div className="sw-app" style={{ flexDirection: 'column' }}>
@@ -2263,6 +2329,7 @@ export default function AdminPage() {
             <div className="sw-sidebar-section-title">MONITORING</div>
             <NavItem label="Dashboard" count={tickets.length} active={page==='dashboard'} onClick={() => setPage('dashboard')} />
             <NavItem label="Semua Tiket" count={tickets.filter(t => ['Open','In Progress'].includes(t.status)).length} active={page==='tickets'} onClick={() => setPage('tickets')} />
+            <NavItem label="Tiket Closed" count={tickets.filter(t => ['Done','Closed'].includes(t.status)).length} active={page==='tickets-closed'} onClick={() => setPage('tickets-closed')} />
             <NavItem label="Routing Rules" active={page==='routing'} onClick={() => setPage('routing')} />
           </div>
           <div className="sw-sidebar-section">
@@ -2287,9 +2354,10 @@ export default function AdminPage() {
         {/* MAIN CONTENT - FULL WIDTH */}
         <div style={{ flex:1, overflow:'auto', padding:24 }}>
           {page === 'dashboard' && <DashboardPage tickets={tickets} allCategories={allCategories} />}
-          {page === 'reporting' && <ReportingPage allPics={allPics} />}
+          {page === 'reporting' && <ReportingPage allPics={allPics} tickets={tickets} />}
           {page === 'kb' && <KBManagerPage allCategories={allCategories} allKbArticles={allKbArticles} onKbChange={refreshMasterData} />}
           {page === 'tickets' && <AllTicketsPage tickets={tickets} setTickets={setTickets} allPics={allPics} allCategories={allCategories} allTeams={allTeams} allApps={allApps} allSlaRules={allSlaRules} />}
+          {page === 'tickets-closed' && <AllTicketsPage tickets={tickets} setTickets={setTickets} allPics={allPics} allCategories={allCategories} allTeams={allTeams} allApps={allApps} allSlaRules={allSlaRules} baseFilter={['Done','Closed']} />}
           {page === 'routing' && <RoutingRulesPage allPics={allPics} allApps={allApps} allTeams={allTeams} onRulesChange={refreshMasterData} />}
           {page === 'apps' && <AplikasiPage allApps={allApps} allCategories={allCategories} onAppChange={refreshMasterData} />}
           {page === 'config' && <ConfigPage tickets={tickets} allCategories={allCategories} allSlaRules={allSlaRules} onCategoryChange={refreshMasterData} onSlaChange={refreshMasterData} />}

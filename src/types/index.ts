@@ -178,6 +178,9 @@ export interface EmailConfig {
   publicKey: string;
   serviceId: string;
   templateId: string;
+  /** EmailJS template for the new-account credentials email (separate from the
+   * ticket-notification template above). */
+  welcomeTemplateId: string;
   fromEmail: string;
   notifyEmail: string;
 }

@@ -6,7 +6,16 @@ export interface SeedAccount {
   dept?: string;
   teamId?: string;
   createdAt: string;
+  /** Optional per-account override; falls back to SEED_DEFAULT_PASSWORD. */
+  password?: string;
 }
+
+// Password the 14 built-in accounts log in with. Overridable per-deploy via
+// NEXT_PUBLIC_SEED_PASSWORD. Unlike app_users (which carry their own
+// default_password), these accounts have no DB row, so the credential lives
+// here. Change this — and tell your team — before any non-local use.
+export const SEED_DEFAULT_PASSWORD =
+  process.env.NEXT_PUBLIC_SEED_PASSWORD || 'ithelpdesk2026';
 
 export const SEED_ACCOUNTS: SeedAccount[] = [
   // ── Admin

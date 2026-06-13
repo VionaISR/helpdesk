@@ -4,6 +4,7 @@ node_modules/
 # Next.js build output
 .next/
 out/
+tsconfig.tsbuildinfo
 
 # env files
 .env
@@ -14,3 +15,10 @@ out/
 .DS_Store
 *.pem
 npm-debug.log*
+
+# Office temp/lock files
+~$*
+
+# Data dumps & source artifacts (data tiket asli — jangan di-commit)
+ticket_export_*.xlsx
+Data Assign.jpeg

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Team, PIC, Category, App, SlaRule, KBArticle } from '@/types';
 import { supabase } from '@/lib/supabase/client';
 import { SEED_ACCOUNTS } from '@/lib/account-store';
-import { userStore } from '@/lib/user-store';
 
 // ─── ROW <-> TYPE MAPPING ────────────────────────────────────────────────────
 // Master data (teams, pics, categories, app_routing, sla_rules, kb_articles)
@@ -182,9 +181,94 @@ export function useMasterData() {
   return { teams, pics, categories, apps, slaRules, kbArticles, loading, refresh };
 }
 
+// ─── APP USERS (akun terdaftar via Admin > Import Pengguna) ─────────────────
+
+interface AppUserRow {
+  id: string;
+  email: string;
+  name: string;
+  dept: string | null;
+  role: string;
+  team_id: string | null;
+  default_password: string;
+  registered_at: string;
+  email_sent: boolean | null;
+}
+
+export interface AppUser {
+  id: string;
+  email: string;
+  name: string;
+  dept: string | null;
+  role: 'user' | 'pic';
+  teamId: string | null;
+  defaultPassword: string;
+  registeredAt: string;
+  emailSent: boolean;
+}
+
+function mapAppUser(row: AppUserRow): AppUser {
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    dept: row.dept,
+    role: row.role as AppUser['role'],
+    teamId: row.team_id,
+    defaultPassword: row.default_password,
+    registeredAt: row.registered_at,
+    emailSent: row.email_sent ?? false,
+  };
+}
+
+export async function fetchAppUsers(): Promise<AppUser[]> {
+  const { data, error } = await supabase.from('app_users').select('*');
+  logError('fetchAppUsers', error);
+  return ((data ?? []) as AppUserRow[]).map(mapAppUser);
+}
+
+export async function findAppUserByEmail(email: string): Promise<AppUser | null> {
+  const { data, error } = await supabase.from('app_users').select('*').ilike('email', email).maybeSingle();
+  logError('findAppUserByEmail', error);
+  return data ? mapAppUser(data as AppUserRow) : null;
+}
+
+export async function insertAppUser(input: { id: string; email: string; name: string; dept?: string | null; role: 'user' | 'pic'; teamId?: string | null; defaultPassword: string }): Promise<void> {
+  const { error } = await supabase.from('app_users').insert({
+    id: input.id,
+    email: input.email,
+    name: input.name,
+    dept: input.dept ?? null,
+    role: input.role,
+    team_id: input.teamId ?? null,
+    default_password: input.defaultPassword,
+    registered_at: new Date().toISOString(),
+    email_sent: false,
+  });
+  logError('insertAppUser', error);
+}
+
+export async function updateAppUser(email: string, patch: { email?: string; name?: string; defaultPassword?: string }): Promise<void> {
+  const row: Record<string, string> = {};
+  if (patch.email !== undefined) row.email = patch.email;
+  if (patch.name !== undefined) row.name = patch.name;
+  if (patch.defaultPassword !== undefined) row.default_password = patch.defaultPassword;
+  if (Object.keys(row).length === 0) return;
+  const { error } = await supabase.from('app_users').update(row).ilike('email', email);
+  logError('updateAppUser', error);
+}
+
+export async function deleteAppUser(email: string): Promise<void> {
+  const { error } = await supabase.from('app_users').delete().ilike('email', email);
+  logError('deleteAppUser', error);
+}
+
+export async function markAppUserEmailSent(email: string): Promise<void> {
+  const { error } = await supabase.from('app_users').update({ email_sent: true }).ilike('email', email);
+  logError('markAppUserEmailSent', error);
+}
+
 // ─── USER PROFILES (Karyawan terdaftar, role='user') ────────────────────────
-// Still backed by localStorage (account-store / user-store) — auth has not
-// been migrated to Supabase yet.
 
 export interface UserProfile {
   id: string;
@@ -199,9 +283,10 @@ export async function fetchUserProfiles(): Promise<UserProfile[]> {
     .filter(a => a.role === 'user')
     .map(a => ({ id: a.email, email: a.email, name: a.name, dept: a.dept ?? null, createdAt: a.createdAt }));
 
-  const registered: UserProfile[] = userStore.getAll()
+  const appUsers = await fetchAppUsers();
+  const registered: UserProfile[] = appUsers
     .filter(u => u.role === 'user')
-    .map(u => ({ id: u.id, email: u.email, name: u.name, dept: u.dept ?? null, createdAt: u.registeredAt }));
+    .map(u => ({ id: u.id, email: u.email, name: u.name, dept: u.dept, createdAt: u.registeredAt }));
 
   return [...seedUsers, ...registered].sort((a, b) => a.name.localeCompare(b.name));
 }

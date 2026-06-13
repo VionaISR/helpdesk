@@ -43,7 +43,7 @@ export default function LoginPage() {
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="nama@lippo.id"
+              placeholder="nama@ithelpdesk.com"
               autoComplete="email"
             />
           </div>

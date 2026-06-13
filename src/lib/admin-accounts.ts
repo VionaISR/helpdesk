@@ -1,5 +1,9 @@
-import { userStore } from './user-store';
-import { SEED_ACCOUNTS } from './account-store';
+import { supabase } from '@/lib/supabase/client';
+
+// Account management now goes through /api/admin/users — creating, renaming, or
+// deleting a login touches auth.users, which requires the service-role key
+// (server-only). These functions are thin authenticated wrappers; the route
+// itself re-verifies the caller is an admin.
 
 export interface CreateAccountInput {
   email: string;
@@ -21,68 +25,38 @@ export interface UpdateAccountInput {
 
 type Result = { ok: true } | { ok: false; error: string };
 
-function isBrowser(): boolean {
-  return typeof window !== 'undefined';
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
 }
 
-function emailExists(email: string): boolean {
-  const lower = email.toLowerCase();
-  return SEED_ACCOUNTS.some(a => a.email.toLowerCase() === lower)
-    || userStore.getAll().some(u => u.email.toLowerCase() === lower);
+async function callUsersApi(method: 'POST' | 'PATCH' | 'DELETE', body: unknown): Promise<Result> {
+  try {
+    const res = await fetch('/api/admin/users', {
+      method,
+      headers: await authHeaders(),
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) return { ok: false, error: json.error ?? 'Operasi gagal.' };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Operasi gagal.' };
+  }
 }
 
 export async function adminCreateAccount(input: CreateAccountInput): Promise<Result> {
-  if (emailExists(input.email)) {
-    return { ok: false, error: 'Email sudah terdaftar.' };
-  }
-
-  if (isBrowser()) {
-    userStore.addMany([{
-      id: `u-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      email: input.email,
-      name: input.name,
-      dept: input.dept ?? '',
-      role: input.role,
-      teamId: input.teamId,
-      defaultPassword: input.password,
-      registeredAt: new Date().toISOString(),
-      emailSent: false,
-    }]);
-  }
-
-  return { ok: true };
+  return callUsersApi('POST', input);
 }
 
 export async function adminUpdateAccount(input: UpdateAccountInput): Promise<Result> {
-  const lower = input.email.toLowerCase();
-  const registered = userStore.findByEmail(input.email);
-
-  if (registered) {
-    const all = userStore.getAll();
-    const idx = all.findIndex(u => u.email.toLowerCase() === lower);
-    all[idx] = {
-      ...all[idx],
-      ...(input.name ? { name: input.name } : {}),
-      ...(input.newEmail ? { email: input.newEmail } : {}),
-      ...(input.newPassword ? { defaultPassword: input.newPassword } : {}),
-    };
-    if (isBrowser()) localStorage.setItem(userStore.KEY, JSON.stringify(all));
-    return { ok: true };
-  }
-
-  const isSeed = SEED_ACCOUNTS.some(a => a.email.toLowerCase() === lower);
-  if (isSeed && input.newEmail && input.newEmail.toLowerCase() !== lower) {
-    return { ok: false, error: 'Email login akun bawaan sistem tidak bisa diubah pada mode prototype ini.' };
-  }
-
-  return { ok: true };
+  return callUsersApi('PATCH', input);
 }
 
 export async function adminDeleteAccount(email: string): Promise<Result> {
-  const lower = email.toLowerCase();
-  if (SEED_ACCOUNTS.some(a => a.email.toLowerCase() === lower)) {
-    return { ok: false, error: 'Akun bawaan sistem tidak bisa dihapus.' };
-  }
-  if (isBrowser()) userStore.remove(email);
-  return { ok: true };
+  return callUsersApi('DELETE', { email });
 }

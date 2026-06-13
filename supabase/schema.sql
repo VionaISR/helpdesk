@@ -1,6 +1,12 @@
--- IT Helpdesk — Supabase PostgreSQL Schema v4
--- Post-Stakeholder Review (2026-05-31)
--- Run this in the Supabase SQL editor to initialize the database.
+-- IT Helpdesk — Supabase PostgreSQL Schema v6
+-- Supabase Auth adopted (2026-06-13). Supersedes v5 "Simplified prototype",
+-- which left every table open to the anon role. v6 introduces a `profiles`
+-- table (app identity keyed by auth.users.id), role-aware RLS, and removes all
+-- anon access. After running this file:
+--   1. set SUPABASE_SERVICE_ROLE_KEY in your environment
+--   2. run `node scripts/provision-auth.mjs` to create auth.users + profiles
+--      for the 14 seed accounts and any existing app_users rows.
+-- Run this in the Supabase SQL editor to initialize/update the database.
 
 -- Enable UUID extension
 create extension if not exists "pgcrypto";
@@ -51,25 +57,8 @@ create table if not exists categories (
 );
 
 -- ============================================================
--- PROFILES — User accounts (mirrors auth.users)
--- ============================================================
-create table if not exists profiles (
-  id          uuid primary key references auth.users(id) on delete cascade,
-  email       text unique not null,
-  name        text not null,
-  initials    text,
-  role        text not null check (role in ('admin', 'pic', 'user')),
-  dept        text,
-  team_id     text references teams(id),
-  pic_id      text references pics(id),
-  is_head     boolean default false,
-  created_at  timestamptz default now(),
-  updated_at  timestamptz default now()
-);
-
--- ============================================================
 -- APPLICATION ROUTING RULES
--- Maps application → team → PIC(s)
+-- Maps application → team → PIC
 -- ============================================================
 create table if not exists app_routing (
   id              uuid primary key default gen_random_uuid(),
@@ -79,22 +68,13 @@ create table if not exists app_routing (
   team_id         text references teams(id),
   primary_pic_id  text references pics(id),
   is_active       boolean default true,
-  created_by      uuid references profiles(id),
   created_at      timestamptz default now(),
   updated_at      timestamptz default now()
 );
 
--- ============================================================
--- MULTI-PIC MAPPING (pivot table)
--- Allows multiple PICs per application
--- ============================================================
-create table if not exists app_routing_pics (
-  id              uuid primary key default gen_random_uuid(),
-  app_routing_id  uuid references app_routing(id) on delete cascade,
-  pic_id          text references pics(id),
-  created_at      timestamptz default now(),
-  unique(app_routing_id, pic_id)
-);
+-- Older installs may have a created_by column referencing the now-removed
+-- profiles table — drop it (the app never set this field).
+alter table app_routing drop column if exists created_by;
 
 -- ============================================================
 -- SLA RULES (Admin configurable)
@@ -110,83 +90,62 @@ create table if not exists sla_rules (
 -- ============================================================
 -- TICKETS
 -- ============================================================
-create table if not exists tickets (
-  id                  text primary key,
-  subject             text not null,
-  body                text,
-  from_email          text not null,
-  from_name           text,
-  dept                text,
-  category            text check (category in ('Hardware', 'Software', 'Network', 'Access', 'Other')),
-  app                 text,
-  priority            text not null default 'Medium' check (priority in ('Low', 'Medium', 'High', 'Critical')),
+-- v5: simplified single-table design. comments/activity/attachments are
+-- stored as jsonb, matching src/types/index.ts (Comment, ActivityItem,
+-- Attachment) 1:1 — no separate comments/ticket_timeline tables and no
+-- dependency on Supabase Auth (auth.uid()/auth.users).
+--
+-- The previous v4 "tickets" table (uuid FKs to profiles, status/category
+-- check constraints that didn't match the app, assigned_pics[] for a
+-- multi-PIC queue that was never implemented) is dropped and recreated —
+-- it held no real data, since the app has only ever written tickets to
+-- localStorage.
+drop table if exists tickets cascade;
 
-  -- Routing fields (auto-filled by system based on app_routing)
-  assignee_team_id    text references teams(id),
-  assigned_pics      text[],                       -- Array of pic_ids, e.g. ["p-ivan", "p-apri"]
-  assigned_to_id      text,                         -- Owner (null if queued/multi-PIC)
-
-  -- Internal fields (user cannot see/edit directly)
-  specific_task       text,                        -- Internal only, user tidak lihat
-
-  -- Status & SLA
-  status              text not null default 'Open' check (status in ('Open', 'Queued', 'In Progress', 'Done', 'Closed')),
-  sla_deadline        timestamptz,
-  sla_warning_at      timestamptz,
-  resolved_at         timestamptz,
-  closed_at           timestamptz,
-
-  -- Rating & Meta
-  csat                integer check (csat >= 1 and csat <= 5),
-  created_by          uuid references profiles(id),
-  created_at          timestamptz default now(),
-  updated_at          timestamptz default now()
+create table tickets (
+  id                    text primary key,
+  subject               text not null,
+  body                  text,
+  from_email            text not null,
+  from_name             text,
+  dept                  text,
+  cc                    text[],
+  category              text,
+  app                   text,
+  specific_task         text,
+  priority              text not null default 'Medium' check (priority in ('Low', 'Medium', 'High', 'Critical')),
+  assignee_team_id      text,
+  assigned_to_id        text,
+  assigned_name         text,
+  status                text not null default 'Open' check (status in ('Open', 'In Progress', 'Pending', 'Revisi', 'Done', 'Closed')),
+  auto_routed           boolean default false,
+  auto_route_confidence jsonb,
+  sla_deadline          timestamptz,
+  resolved_at           timestamptz,
+  attachments           jsonb not null default '[]'::jsonb,
+  comments              jsonb not null default '[]'::jsonb,
+  activity              jsonb not null default '[]'::jsonb,
+  csat                  integer check (csat >= 1 and csat <= 5),
+  created_at            timestamptz default now(),
+  updated_at            timestamptz default now()
 );
 
 -- ============================================================
--- COMMENTS
+-- APP USERS (registered via Admin > Import User CSV)
 -- ============================================================
-create table if not exists comments (
-  id              uuid primary key default gen_random_uuid(),
-  ticket_id       text not null references tickets(id) on delete cascade,
-  author_id       uuid references profiles(id),
-  author_name     text,
-  author_initials text,
-  body            text not null,
-  is_internal     boolean default false,            -- Internal notes (user tidak lihat)
-  attachment_url  text,
-  created_at      timestamptz default now()
-);
-
--- ============================================================
--- TICKET TIMELINE (activity log)
--- ============================================================
-create table if not exists ticket_timeline (
-  id          uuid primary key default gen_random_uuid(),
-  ticket_id   text not null references tickets(id) on delete cascade,
-  event_type  text not null,                       -- created, assigned, claimed, in_progress, commented, resolved, closed, reassigned
-  actor_id    uuid references profiles(id),
-  actor_name  text,
-  actor_role  text,
-  description  text,
-  metadata    jsonb,
-  created_at  timestamptz default now()
-);
-
--- ============================================================
--- NOTIFICATIONS
--- ============================================================
-create table if not exists notifications (
-  id          uuid primary key default gen_random_uuid(),
-  ticket_id   text references tickets(id) on delete cascade,
-  team_id     text,
-  pic_id      text,
-  user_id     uuid references profiles(id),
-  type        text,                                -- new_ticket, mentioned, assigned, claimed, commented, sla_warning, sla_breach
-  title       text,
-  message     text,
-  is_read     boolean default false,
-  created_at  timestamptz default now()
+-- Mirrors RegisteredUser from src/lib/user-store.ts. SEED_ACCOUNTS (the 14
+-- built-in accounts) stay hardcoded in src/lib/account-store.ts — they're
+-- identical on every device already and don't need a table.
+create table if not exists app_users (
+  id                text primary key,
+  email             text unique not null,
+  name              text not null,
+  dept              text,
+  role              text not null check (role in ('user', 'pic')),
+  team_id           text,
+  default_password  text not null,
+  registered_at     timestamptz default now(),
+  email_sent        boolean default false
 );
 
 -- ============================================================
@@ -198,244 +157,188 @@ create table if not exists kb_articles (
   body        text,
   category    text,
   is_published boolean default false,
-  created_by  uuid references profiles(id),
   views       integer default 0,
   created_at  timestamptz default now(),
   updated_at  timestamptz default now()
 );
 
+-- Older installs may have a created_by column referencing the now-removed
+-- profiles table — drop it (the app never set this field).
+alter table kb_articles drop column if exists created_by;
+
 -- ============================================================
--- IMPORTED USERS (staging table for CSV import)
+-- Drop unused v4 tables — depended on Supabase Auth / auth.users, never
+-- adopted. The multi-PIC queue, ticket_timeline, notifications, audit log
+-- and CSV import staging were all simplified away in the actual app.
 -- ============================================================
-create table if not exists import_queue (
-  id          uuid primary key default gen_random_uuid(),
-  email       text not null,
-  name        text,
-  role        text,
-  team_id     text,
+drop table if exists comments cascade;
+drop table if exists ticket_timeline cascade;
+drop table if exists notifications cascade;
+drop table if exists audit_log cascade;
+drop table if exists import_queue cascade;
+drop table if exists app_routing_pics cascade;
+
+-- ============================================================
+-- PROFILES (app identity for Supabase Auth users)
+-- ============================================================
+-- v6: the app now authenticates via Supabase Auth. auth.users holds the
+-- credential; this table holds the app-specific identity (role, pic linkage,
+-- dept/team) keyed by auth.users.id. Populated by scripts/provision-auth.mjs
+-- (seed accounts + existing app_users) and by the admin create-user API route.
+create table if not exists profiles (
+  id          uuid primary key references auth.users(id) on delete cascade,
+  email       text unique not null,
+  name        text not null,
+  role        text not null default 'user' check (role in ('user', 'pic', 'admin')),
   pic_id      text,
-  status      text default 'pending' check (status in ('pending', 'processing', 'completed', 'failed')),
-  error_msg   text,
-  created_by  uuid references profiles(id),
+  dept        text,
+  team_id     text,
   created_at  timestamptz default now()
 );
+create index if not exists idx_profiles_role on profiles(role);
 
 -- ============================================================
--- AUDIT LOG
+-- ROLE HELPERS (for RLS — Supabase Auth)
 -- ============================================================
-create table if not exists audit_log (
-  id          uuid primary key default gen_random_uuid(),
-  actor_id    uuid references profiles(id),
-  actor_name  text,
-  action      text not null,                       -- login, logout, create_ticket, update_status, reassign, import_users, etc.
-  entity_type text,                               -- tickets, profiles, app_routing, sla_rules, etc.
-  entity_id   text,
-  payload     jsonb,
-  ip_address  text,
-  user_agent  text,
-  created_at  timestamptz default now()
-);
+-- SECURITY DEFINER so reading the caller's profile inside a policy does NOT
+-- re-trigger profiles' own RLS (which would recurse). Must be created before
+-- the policies that reference them.
+create or replace function auth_role()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select role from public.profiles where id = auth.uid();
+$$;
+
+create or replace function auth_is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select role from public.profiles where id = auth.uid()) = 'admin', false);
+$$;
+
+-- The caller's email (from their profile), used for per-row ticket ownership.
+create or replace function auth_email()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select email from public.profiles where id = auth.uid();
+$$;
 
 -- ============================================================
--- ROW LEVEL SECURITY
+-- ROW LEVEL SECURITY (Supabase Auth — v6)
 -- ============================================================
+-- The frontend now authenticates via Supabase Auth: every data request carries
+-- the user's JWT, and the anon role is no longer trusted with any table.
+--   * Master data + KB: readable by any authenticated user; writable by admins.
+--   * Tickets: per-row — a user sees/edits only their own; PIC/admin see all.
+--     Insert open to authenticated; delete restricted to PIC/admin.
+--   * app_users + profiles: only the owner and admins can read; only admins
+--     (and the service role, which bypasses RLS) can write.
+-- Every policy is preceded by `drop policy if exists` so this file stays
+-- re-runnable (CREATE POLICY has no IF NOT EXISTS).
 
--- Master data (teams/pics/categories/app_routing/sla_rules/kb_articles): the
--- frontend currently connects with the anon key and has NOT adopted Supabase
--- Auth yet (auth stays on localStorage for now), so these tables are left
--- open to the anon role. Revisit once auth is migrated to Supabase.
+-- helper expressions used below:
+--   auth.uid() is not null   → request is authenticated
+--   auth_is_admin()          → caller's profile.role = 'admin'
 
--- Note: every policy below is preceded by `drop policy if exists` so this
--- script can be re-run safely against a database that already has policies
--- from a previous version of this file (CREATE POLICY has no IF NOT EXISTS).
-
--- Teams: anon read/write (prototype phase, no Supabase Auth yet)
+-- Teams: authenticated read, admin write
 alter table teams enable row level security;
 drop policy if exists "teams_read" on teams;
-create policy "teams_read" on teams for select using (true);
+create policy "teams_read" on teams for select using (auth.uid() is not null);
 drop policy if exists "teams_write" on teams;
-create policy "teams_write" on teams for all using (true) with check (true);
+create policy "teams_write" on teams for all using (auth_is_admin()) with check (auth_is_admin());
 
--- Pics: anon read/write (prototype phase, no Supabase Auth yet)
+-- Pics: authenticated read, admin write
 alter table pics enable row level security;
 drop policy if exists "pics_read" on pics;
-create policy "pics_read" on pics for select using (true);
+create policy "pics_read" on pics for select using (auth.uid() is not null);
 drop policy if exists "pics_write" on pics;
-create policy "pics_write" on pics for all using (true) with check (true);
+create policy "pics_write" on pics for all using (auth_is_admin()) with check (auth_is_admin());
 
--- Categories: anon read/write (prototype phase, no Supabase Auth yet)
+-- Categories: authenticated read, admin write
 alter table categories enable row level security;
 drop policy if exists "categories_read" on categories;
-create policy "categories_read" on categories for select using (true);
+create policy "categories_read" on categories for select using (auth.uid() is not null);
 drop policy if exists "categories_write" on categories;
-create policy "categories_write" on categories for all using (true) with check (true);
+create policy "categories_write" on categories for all using (auth_is_admin()) with check (auth_is_admin());
 
--- Profiles: users can read all, update only own row
-alter table profiles enable row level security;
-drop policy if exists "profiles_read" on profiles;
-create policy "profiles_read" on profiles for select using (auth.role() = 'authenticated');
-drop policy if exists "profiles_update_own" on profiles;
-create policy "profiles_update_own" on profiles for update using (auth.uid() = id);
-drop policy if exists "profiles_insert" on profiles;
-create policy "profiles_insert" on profiles for insert with check (auth.role() in ('admin'));
-
--- App Routing: anon read/write (prototype phase, no Supabase Auth yet)
+-- App Routing: authenticated read, admin write
 alter table app_routing enable row level security;
 drop policy if exists "app_routing_read" on app_routing;
-create policy "app_routing_read" on app_routing for select using (true);
+create policy "app_routing_read" on app_routing for select using (auth.uid() is not null);
 drop policy if exists "app_routing_write" on app_routing;
-create policy "app_routing_write" on app_routing for all using (true) with check (true);
+create policy "app_routing_write" on app_routing for all using (auth_is_admin()) with check (auth_is_admin());
 
--- App Routing Pics: anon read/write (prototype phase, no Supabase Auth yet)
-alter table app_routing_pics enable row level security;
-drop policy if exists "app_routing_pics_read" on app_routing_pics;
-create policy "app_routing_pics_read" on app_routing_pics for select using (true);
-drop policy if exists "app_routing_pics_write" on app_routing_pics;
-create policy "app_routing_pics_write" on app_routing_pics for all using (true) with check (true);
-
--- SLA Rules: anon read/write (prototype phase, no Supabase Auth yet)
+-- SLA Rules: authenticated read, admin write
 alter table sla_rules enable row level security;
 drop policy if exists "sla_rules_read" on sla_rules;
-create policy "sla_rules_read" on sla_rules for select using (true);
+create policy "sla_rules_read" on sla_rules for select using (auth.uid() is not null);
 drop policy if exists "sla_rules_write" on sla_rules;
-create policy "sla_rules_write" on sla_rules for all using (true) with check (true);
+create policy "sla_rules_write" on sla_rules for all using (auth_is_admin()) with check (auth_is_admin());
 
--- Tickets: User sees own, PIC sees team tickets, Admin sees all
+-- Tickets: per-row ownership.
+--   read   → a user sees only their own tickets; PIC/admin see all.
+--   insert → any authenticated user (users file their own; first-load seeding).
+--   update → owner (e.g. replying to own ticket) or PIC/admin.
+--   delete → PIC/admin only.
 alter table tickets enable row level security;
-drop policy if exists "tickets_read_own" on tickets;
-create policy "tickets_read_own" on tickets for select using (
-  exists (
-    select 1 from profiles
-    where id = auth.uid() and role = 'user' and created_by = auth.uid()
-  )
-  or
-  exists (
-    select 1 from profiles p
-    where p.id = auth.uid() and p.role in ('pic', 'admin') and (
-      p.team_id = assignee_team_id
-      or auth.uid() = created_by
-    )
-  )
-  or
-  exists (
-    select 1 from profiles p
-    where p.id = auth.uid() and p.role = 'admin'
-  )
-);
+drop policy if exists "tickets_read" on tickets;
+create policy "tickets_read" on tickets for select
+  using (
+    auth_role() in ('pic', 'admin')
+    or lower(from_email) = lower(coalesce(auth_email(), ''))
+  );
+-- Drop the old combined write policy from earlier v6 revisions, then split.
+drop policy if exists "tickets_write" on tickets;
 drop policy if exists "tickets_insert" on tickets;
-create policy "tickets_insert" on tickets for insert with check (auth.role() = 'authenticated');
-drop policy if exists "tickets_update_team" on tickets;
-create policy "tickets_update_team" on tickets for update using (
-  exists (
-    select 1 from profiles p
-    where p.id = auth.uid() and p.role = 'pic' and p.team_id = assignee_team_id
+create policy "tickets_insert" on tickets for insert
+  with check (auth.uid() is not null);
+drop policy if exists "tickets_update" on tickets;
+create policy "tickets_update" on tickets for update
+  using (
+    auth_role() in ('pic', 'admin')
+    or lower(from_email) = lower(coalesce(auth_email(), ''))
   )
-  or
-  exists (
-    select 1 from profiles p
-    where p.id = auth.uid() and p.role = 'admin'
-  )
-);
+  with check (
+    auth_role() in ('pic', 'admin')
+    or lower(from_email) = lower(coalesce(auth_email(), ''))
+  );
+drop policy if exists "tickets_delete" on tickets;
+create policy "tickets_delete" on tickets for delete
+  using (auth_role() in ('pic', 'admin'));
 
--- Comments: User sees public comments on own tickets, PIC sees all on team tickets
-alter table comments enable row level security;
-drop policy if exists "comments_read_user" on comments;
-create policy "comments_read_user" on comments for select using (
-  not is_internal and exists (
-    select 1 from tickets t
-    join profiles p on p.id = auth.uid()
-    where t.id = ticket_id and (t.created_by = auth.uid() or p.team_id = t.assignee_team_id)
-    and p.role = 'user'
-  )
-  or
-  exists (
-    select 1 from profiles p
-    where p.id = auth.uid() and p.role in ('pic', 'admin')
-    and exists (
-      select 1 from tickets tt
-      where tt.id = ticket_id and (p.team_id = tt.assignee_team_id or true)
-    )
-  )
-);
-drop policy if exists "comments_insert" on comments;
-create policy "comments_insert" on comments for insert with check (auth.role() = 'authenticated');
+-- App Users: only admins can see/manage the registered-account list. Creation
+-- happens via the service role (admin create-user API route), which bypasses RLS.
+alter table app_users enable row level security;
+drop policy if exists "app_users_read" on app_users;
+create policy "app_users_read" on app_users for select using (auth_is_admin());
+drop policy if exists "app_users_write" on app_users;
+create policy "app_users_write" on app_users for all using (auth_is_admin()) with check (auth_is_admin());
 
--- Timeline: same as tickets (user sees own, team sees team, admin sees all)
-alter table ticket_timeline enable row level security;
-drop policy if exists "timeline_read" on ticket_timeline;
-create policy "timeline_read" on ticket_timeline for select using (
-  exists (
-    select 1 from profiles p
-    where p.id = auth.uid() and p.role = 'admin'
-  )
-  or
-  exists (
-    select 1 from tickets t
-    join profiles p on p.id = auth.uid()
-    where t.id = ticket_id and (
-      (p.role = 'user' and t.created_by = auth.uid())
-      or (p.role in ('pic', 'admin') and p.team_id = t.assignee_team_id)
-    )
-  )
-);
-drop policy if exists "timeline_insert" on ticket_timeline;
-create policy "timeline_insert" on ticket_timeline for insert with check (auth.role() = 'authenticated');
+-- Profiles: a user may read their own profile; admins may read all. Writes are
+-- admin-only via the app; provisioning/creation uses the service role.
+alter table profiles enable row level security;
+drop policy if exists "profiles_read" on profiles;
+create policy "profiles_read" on profiles for select using (id = auth.uid() or auth_is_admin());
+drop policy if exists "profiles_write" on profiles;
+create policy "profiles_write" on profiles for all using (auth_is_admin()) with check (auth_is_admin());
 
--- Notifications: each user/PIC sees only their own
-alter table notifications enable row level security;
-drop policy if exists "notifications_read_own" on notifications;
-create policy "notifications_read_own" on notifications for select using (
-  user_id = auth.uid()
-  or
-  exists (
-    select 1 from profiles p
-    where p.id = auth.uid() and p.pic_id = notifications.pic_id
-  )
-  or
-  exists (
-    select 1 from profiles p
-    where p.id = auth.uid() and p.role = 'admin'
-  )
-);
-drop policy if exists "notifications_update_own" on notifications;
-create policy "notifications_update_own" on notifications for update using (
-  user_id = auth.uid()
-  or exists (
-    select 1 from profiles p
-    where p.id = auth.uid() and p.pic_id = notifications.pic_id
-  )
-  or exists (
-    select 1 from profiles p
-    where p.id = auth.uid() and p.role = 'admin'
-  )
-);
-
--- KB Articles: anon read/write (prototype phase, no Supabase Auth yet)
+-- KB Articles: authenticated read, admin write
 alter table kb_articles enable row level security;
 drop policy if exists "kb_read" on kb_articles;
-create policy "kb_read" on kb_articles for select using (true);
+create policy "kb_read" on kb_articles for select using (auth.uid() is not null);
 drop policy if exists "kb_write" on kb_articles;
-create policy "kb_write" on kb_articles for all using (true) with check (true);
-
--- Audit Log: admin only
-alter table audit_log enable row level security;
-drop policy if exists "audit_read" on audit_log;
-create policy "audit_read" on audit_log for select using (
-  exists (select 1 from profiles p where p.id = auth.uid() and p.role = 'admin')
-);
-drop policy if exists "audit_insert" on audit_log;
-create policy "audit_insert" on audit_log for insert with check (auth.role() = 'authenticated');
-
--- Import Queue: admin only
-alter table import_queue enable row level security;
-drop policy if exists "import_queue_read" on import_queue;
-create policy "import_queue_read" on import_queue for select using (
-  exists (select 1 from profiles p where p.id = auth.uid() and p.role = 'admin')
-);
-drop policy if exists "import_queue_write" on import_queue;
-create policy "import_queue_write" on import_queue for all using (
-  exists (select 1 from profiles p where p.id = auth.uid() and p.role = 'admin')
-);
+create policy "kb_write" on kb_articles for all using (auth_is_admin()) with check (auth_is_admin());
 
 -- ============================================================
 -- INDEXES
@@ -443,38 +346,20 @@ create policy "import_queue_write" on import_queue for all using (
 create index if not exists idx_teams_id on teams(id);
 create index if not exists idx_pics_team on pics(team_id);
 create index if not exists idx_pics_active on pics(is_active) where is_active = true;
-create index if not exists idx_profiles_team on profiles(team_id);
-create index if not exists idx_profiles_pic on profiles(pic_id);
 create index if not exists idx_app_routing_team on app_routing(team_id);
 create index if not exists idx_app_routing_app_name on app_routing(app_name);
-create index if not exists idx_app_routing_pics_app on app_routing_pics(app_routing_id);
 create index if not exists idx_sla_priority on sla_rules(priority);
 
 create index if not exists idx_tickets_status on tickets(status);
 create index if not exists idx_tickets_team on tickets(assignee_team_id);
-create index if not exists idx_tickets_assigned_pics on tickets using gin(assigned_pics);
-create index if not exists idx_tickets_owner on tickets(assigned_to_id) where assigned_to_id is not null;
-create index if not exists idx_tickets_created_by on tickets(created_by);
+create index if not exists idx_tickets_assigned_to on tickets(assigned_to_id) where assigned_to_id is not null;
+create index if not exists idx_tickets_from_email on tickets(from_email);
 create index if not exists idx_tickets_created_at on tickets(created_at desc);
-create index if not exists idx_tickets_sla_warning on tickets(sla_warning_at) where status not in ('Done', 'Closed');
-create index if not exists idx_tickets_sla_deadline on tickets(sla_deadline) where status not in ('Done', 'Closed');
 
-create index if not exists idx_comments_ticket on comments(ticket_id);
-create index if not exists idx_comments_internal on comments(is_internal) where is_internal = false;
-
-create index if not exists idx_timeline_ticket on ticket_timeline(ticket_id, created_at);
-
-create index if not exists idx_notifications_user on notifications(user_id, is_read);
-create index if not exists idx_notifications_pic on notifications(pic_id, is_read);
-create index if not exists idx_notifications_team on notifications(team_id, is_read);
-create index if not exists idx_notifications_unread on notifications(is_read) where is_read = false;
+create index if not exists idx_app_users_email on app_users(email);
 
 create index if not exists idx_kb_published on kb_articles(is_published) where is_published = true;
 create index if not exists idx_kb_category on kb_articles(category);
-
-create index if not exists idx_audit_actor on audit_log(actor_id);
-create index if not exists idx_audit_entity on audit_log(entity_type, entity_id);
-create index if not exists idx_audit_created on audit_log(created_at desc);
 
 -- ============================================================
 -- FUNCTIONS & TRIGGERS
@@ -489,11 +374,6 @@ begin
 end;
 $$ language plpgsql;
 
-drop trigger if exists tr_profiles_updated_at on profiles;
-create trigger tr_profiles_updated_at
-  before update on profiles
-  for each row execute function update_updated_at();
-
 drop trigger if exists tr_tickets_updated_at on tickets;
 create trigger tr_tickets_updated_at
   before update on tickets
@@ -504,20 +384,30 @@ create trigger tr_kb_updated_at
   before update on kb_articles
   for each row execute function update_updated_at();
 
--- Generate ticket ID (HD-00001 format)
-create sequence if not exists ticket_id_seq;
-
-create or replace function generate_ticket_id()
-returns text as $$
-declare
-  new_id text;
-  seq_val integer;
-begin
-  select nextval('ticket_id_seq') into seq_val;
-  new_id := 'HD-' || lpad(seq_val::text, 5, '0');
-  return new_id;
-end;
-$$ language plpgsql;
+-- Atomic append for ticket comments/activity (avoids the lost-update race from
+-- client-side read-modify-write of the jsonb arrays). p_comments and p_activity
+-- are jsonb ARRAYS that get concatenated onto the existing arrays in a single
+-- row-locked UPDATE. p_status / p_resolved_at are optional scalar overrides.
+-- Called from src/lib/ticket-store.ts appendTicketEvent() via supabase.rpc().
+-- Safe to run on an existing database — it does not touch table data.
+create or replace function append_ticket_event(
+  p_id          text,
+  p_comments    jsonb       default '[]'::jsonb,
+  p_activity    jsonb       default '[]'::jsonb,
+  p_status      text        default null,
+  p_resolved_at timestamptz default null
+)
+returns void
+language sql
+as $$
+  update tickets set
+    comments    = coalesce(comments, '[]'::jsonb) || coalesce(p_comments, '[]'::jsonb),
+    activity    = coalesce(activity, '[]'::jsonb) || coalesce(p_activity, '[]'::jsonb),
+    status      = coalesce(p_status, status),
+    resolved_at = coalesce(p_resolved_at, resolved_at),
+    updated_at  = now()
+  where id = p_id;
+$$;
 
 -- ============================================================
 -- SEED DATA
@@ -525,6 +415,10 @@ $$ language plpgsql;
 -- Master data (teams, pics, categories, app_routing, sla_rules,
 -- kb_articles) is NOT seeded here. Run supabase/seed.sql after this
 -- file — it contains the full, idempotent dataset matching src/lib/data.ts.
+--
+-- Tickets are seeded automatically on first load by
+-- src/lib/ticket-store.ts (fetchTickets) from src/lib/data.ts seedTickets,
+-- if the tickets table is empty.
 
 -- ============================================================
 -- DONE

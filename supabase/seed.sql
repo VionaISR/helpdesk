@@ -7,7 +7,6 @@
 -- ============================================================
 -- BERSIHKAN DATA LAMA (urutan FK)
 -- ============================================================
-delete from app_routing_pics;
 delete from app_routing;
 delete from kb_articles;
 delete from categories;

@@ -1,6 +1,5 @@
-import type { App, AnalysisResult, RouteResult, TicketPriority, Team, PIC } from '@/types';
+import type { App, AnalysisResult, RouteResult, TicketPriority, Team, PIC, Ticket } from '@/types';
 import { apps, specificTasks, teams, pics, priorityKeywords, closeKeywords } from '@/lib/data';
-import { ticketStore } from '@/lib/store';
 
 export function detectApp(text: string, liveApps?: App[]): App | null {
   const appList = liveApps ?? apps;
@@ -41,7 +40,7 @@ export function detectPriority(text: string): { priority: TicketPriority; confid
   return { priority: 'Medium', confidence: 0.70 };
 }
 
-export function autoRoute(app: App | null, liveData?: { teams: Team[]; pics: PIC[] }): RouteResult {
+export function autoRoute(app: App | null, liveData?: { teams: Team[]; pics: PIC[] }, existingTickets: Ticket[] = []): RouteResult {
   const teamList = liveData?.teams ?? teams;
   const picList = liveData?.pics ?? pics;
 
@@ -54,7 +53,7 @@ export function autoRoute(app: App | null, liveData?: { teams: Team[]; pics: PIC
   const members = picList.filter(p => p.teamId === team.id && p.id !== team.headId);
   const candidatePool = members.length > 0 ? members : [picList.find(p => p.id === team.headId)!].filter(Boolean);
 
-  const allTickets = ticketStore.getAll();
+  const allTickets = existingTickets;
   const counts: Record<string, number> = {};
   for (const p of candidatePool) {
     counts[p.id] = allTickets.filter(t =>
@@ -70,12 +69,12 @@ export function checkAutoClose(text: string): boolean {
   return closeKeywords.some(kw => lower.includes(kw));
 }
 
-export function analyze(subject: string, body: string, liveData?: { teams: Team[]; pics: PIC[]; apps?: App[] }): AnalysisResult {
+export function analyze(subject: string, body: string, liveData?: { teams: Team[]; pics: PIC[]; apps?: App[] }, existingTickets: Ticket[] = []): AnalysisResult {
   const text = `${subject} ${body}`;
   const app = detectApp(text, liveData?.apps);
   const task = detectTask(text);
   const { priority, confidence: prioConf } = detectPriority(text);
-  const route = autoRoute(app, liveData);
+  const route = autoRoute(app, liveData, existingTickets);
   return {
     app: app ? app.name : '[OTH] - Others',
     category: app ? app.prefix : 'OTH',

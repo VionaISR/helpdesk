@@ -4,12 +4,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getSession, logout } from '@/lib/auth';
-import { ticketStore } from '@/lib/store';
+import { useTickets, insertTicket, updateTicketFields, appendTicketEvent } from '@/lib/ticket-store';
 import { specificTasks } from '@/lib/data';
 import { useMasterData } from '@/lib/master-data';
 import { formatDateTime, timeAgo, statusClass, slaProgress } from '@/lib/utils';
 import { analyze, checkAutoClose } from '@/lib/rule-engine';
-import type { Ticket, Session, Comment, AnalysisResult, Notification, PIC, Team, App, Category } from '@/types';
+import type { Ticket, Session, Comment, ActivityItem, AnalysisResult, Notification, PIC, Team, App, Category } from '@/types';
 
 // ─── NAV LINK COMPONENT ───────────────────────────────────────────────────────
 function NavLink({ href, icon, label, active, onClick }: { href?: string; icon: string; label: string; active?: boolean; onClick?: () => void }) {
@@ -306,7 +306,7 @@ function TicketDetail({ ticket, allPics, allTeams, allCategories, onUpdate, onAd
 }
 
 // ─── EMAIL SIMULATOR ───────────────────────────────────────────────────────────
-function EmailSimulator({ allTeams, allPics, allApps, onClose, onAnalyze }: { allTeams: Team[]; allPics: PIC[]; allApps: App[]; onClose: () => void; onAnalyze: (r: AnalysisResult & { subject: string; body: string; fromName: string; fromEmail: string; dept: string }) => void }) {
+function EmailSimulator({ allTeams, allPics, allApps, tickets, onClose, onAnalyze }: { allTeams: Team[]; allPics: PIC[]; allApps: App[]; tickets: Ticket[]; onClose: () => void; onAnalyze: (r: AnalysisResult & { subject: string; body: string; fromName: string; fromEmail: string; dept: string }) => void }) {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [fromName, setFromName] = useState('Andi Pratama');
@@ -314,7 +314,7 @@ function EmailSimulator({ allTeams, allPics, allApps, onClose, onAnalyze }: { al
   const [dept, setDept] = useState('Finance');
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
-  const doAnalyze = () => setResult(analyze(subject, body, { teams: allTeams, pics: allPics, apps: allApps }));
+  const doAnalyze = () => setResult(analyze(subject, body, { teams: allTeams, pics: allPics, apps: allApps }, tickets));
   const handleCreate = () => { if (!subject.trim() || !body.trim() || !result) return; onAnalyze({ ...result, subject, body, fromName, fromEmail, dept }); };
 
   return (
@@ -405,16 +405,17 @@ function NotificationPanel({ notifications, isHead, onDone, onRead, onClose }: {
 export default function PICPage() {
   const router = useRouter();
   const { teams: allTeams, pics: allPics, apps: allApps, categories: allCategories, slaRules: allSlaRules, loading: masterLoading } = useMasterData();
+  const { tickets, setTickets, loading: ticketsLoading } = useTickets();
   const [session, setSession] = useState<Session | null>(null);
-  const [tickets, setTickets] = useState<Ticket[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState('inbox');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterTeam, setFilterTeam] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showEmailSim, setShowEmailSim] = useState(false);
-  const [currentPicId, setCurrentPicId] = useState('p-ivan');
+  const [currentPicId, setCurrentPicId] = useState('');
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationsInitialized, setNotificationsInitialized] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
   const [currentNav, setCurrentNav] = useState<'tickets' | 'inventory' | 'knowledge' | 'reports'>('tickets');
 
@@ -423,59 +424,62 @@ export default function PICPage() {
     if (!s || !['pic','admin'].includes(s.role)) { router.replace('/login'); return; }
     setSession(s);
     if (s.picId) setCurrentPicId(s.picId);
-    const all = ticketStore.getAll();
-    setTickets(all);
+  }, [router]);
+
+  // A regular PIC always acts as themselves (currentPicId comes from the
+  // session above and the identity picker is hidden — see render). Only admins
+  // may switch identity; default them to the first PIC so actions have a valid
+  // actor.
+  useEffect(() => {
+    if (currentPicId || allPics.length === 0) return;
+    if (session?.role === 'admin') setCurrentPicId(allPics[0].id);
+  }, [allPics, currentPicId, session]);
+
+  useEffect(() => {
+    if (ticketsLoading || notificationsInitialized) return;
     setNotifications(
-      all.filter(t => t.status === 'Open').map(t => ({
+      tickets.filter(t => t.status === 'Open').map(t => ({
         id: t.id, ticketId: t.id, subject: t.subject, fromName: t.fromName,
         app: t.app, teamId: t.assigneeTeamId, time: t.createdAt, isRead: false,
       }))
     );
-  }, [router]);
-
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === ticketStore.KEY) setTickets(ticketStore.getAll());
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
+    setNotificationsInitialized(true);
+  }, [ticketsLoading, tickets, notificationsInitialized]);
 
   const currentPic = allPics.find(p => p.id === currentPicId);
   const isHead = currentPic?.isHead === true;
   const teamNotifs = notifications.filter(n => n.teamId === currentPic?.teamId);
   const unreadCount = teamNotifs.filter(n => !n.isRead).length;
 
-  const updateTicket = (id: string, updates: Partial<Ticket>, note?: string) => {
-    setTickets(prev => {
-      const next = prev.map(t => {
-        if (t.id !== id) return t;
-        const newT: Ticket = { ...t, ...updates, updatedAt: new Date().toISOString() };
-        if (note) newT.activity = [...(t.activity || []), { type: 'system', time: new Date().toISOString(), text: note }];
-        return newT;
-      });
-      ticketStore.saveAll(next);
-      return next;
-    });
+  const updateTicket = async (id: string, updates: Partial<Ticket>, note?: string) => {
+    const target = tickets.find(t => t.id === id);
+    if (!target) return;
+    const updatedAt = new Date().toISOString();
+    const patch: Partial<Ticket> = { ...updates, updatedAt };
+    if (note) {
+      patch.activity = [...(target.activity || []), { type: 'system', time: updatedAt, text: note }] as ActivityItem[];
+    }
+    setTickets(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t));
+    await updateTicketFields(id, patch);
   };
 
-  const addComment = (id: string, comment: Omit<Comment, 'isInternal'>, isInternal: boolean) => {
-    setTickets(prev => {
-      const next = prev.map(t => {
-        if (t.id !== id) return t;
-        const cmt: Comment = { ...comment, isInternal };
-        const newT: Ticket = { ...t, comments: [...(t.comments || []), cmt], updatedAt: new Date().toISOString() };
-        newT.activity = [...(t.activity || []), { type: 'comment', time: comment.time, who: comment.authorName, isInternal }];
-        if (!isInternal && checkAutoClose(comment.body)) {
-          newT.status = 'Done';
-          newT.resolvedAt = new Date().toISOString();
-          newT.activity = [...newT.activity, { type: 'system', time: new Date().toISOString(), text: '🤖 Auto-close trigger terdeteksi → status → Done' }];
-        }
-        return newT;
-      });
-      ticketStore.saveAll(next);
-      return next;
-    });
+  const addComment = async (id: string, comment: Omit<Comment, 'isInternal'>, isInternal: boolean) => {
+    const target = tickets.find(t => t.id === id);
+    if (!target) return;
+    const cmt: Comment = { ...comment, isInternal };
+    const updatedAt = new Date().toISOString();
+    const newActivity: ActivityItem[] = [{ type: 'comment', time: comment.time, who: comment.authorName, isInternal }];
+    const ev: { comments: Comment[]; activity: ActivityItem[]; status?: Ticket['status']; resolvedAt?: string } = { comments: [cmt], activity: newActivity };
+    const localPatch: Partial<Ticket> = { updatedAt };
+    if (!isInternal && checkAutoClose(comment.body)) {
+      ev.status = 'Done';
+      ev.resolvedAt = updatedAt;
+      localPatch.status = 'Done';
+      localPatch.resolvedAt = updatedAt;
+      newActivity.push({ type: 'system', time: updatedAt, text: '🤖 Auto-close trigger terdeteksi → status → Done' });
+    }
+    setTickets(prev => prev.map(t => t.id === id ? { ...t, ...localPatch, comments: [...(t.comments || []), cmt], activity: [...(t.activity || []), ...newActivity] } : t));
+    await appendTicketEvent(id, ev);
   };
 
   const acceptTicket = (id: string) => {
@@ -529,7 +533,7 @@ export default function PICPage() {
     setCurrentNav(nav);
   };
 
-  if (!session || masterLoading) return null;
+  if (!session || masterLoading || ticketsLoading) return null;
 
   return (
     <div className="sw-app">
@@ -540,9 +544,15 @@ export default function PICPage() {
           <span style={{ fontSize:12, fontWeight:500, padding:'4px 10px', background:'var(--accent)', color:'#fff', borderRadius:4 }}>PIC Panel</span>
         </div>
         <div className="sw-topbar-right" style={{ position:'relative' }}>
-          <select style={{ fontSize:12, padding:'6px 10px', border:'1px solid var(--border)', borderRadius:6, background:'var(--surface)', color:'var(--text)', marginRight:8, cursor:'pointer' }} value={currentPicId} onChange={e => { setCurrentPicId(e.target.value); setShowNotif(false); }}>
-            {allPics.map(p => <option key={p.id} value={p.id}>{p.name}{p.isHead?' ★':''}</option>)}
-          </select>
+          {session.role === 'admin' ? (
+            <select style={{ fontSize:12, padding:'6px 10px', border:'1px solid var(--border)', borderRadius:6, background:'var(--surface)', color:'var(--text)', marginRight:8, cursor:'pointer' }} value={currentPicId} onChange={e => { setCurrentPicId(e.target.value); setShowNotif(false); }}>
+              {allPics.map(p => <option key={p.id} value={p.id}>{p.name}{p.isHead?' ★':''}</option>)}
+            </select>
+          ) : (
+            <span title="Identitas PIC mengikuti akun login Anda" style={{ fontSize:12, padding:'6px 10px', marginRight:8, color:'var(--text)', fontWeight:600 }}>
+              {currentPic?.name ?? session.name}{currentPic?.isHead ? ' ★' : ''}
+            </span>
+          )}
           <div style={{ position:'relative', display:'inline-block' }}>
             <button className="sw-btn-icon" onClick={() => setShowNotif(v => !v)}>🔔</button>
             {unreadCount > 0 && <span className="sw-notif-badge">{unreadCount}</span>}
@@ -637,8 +647,9 @@ export default function PICPage() {
           allTeams={allTeams}
           allPics={allPics}
           allApps={allApps}
+          tickets={tickets}
           onClose={() => setShowEmailSim(false)}
-          onAnalyze={result => {
+          onAnalyze={async result => {
             const newId = `ITLK-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${String(tickets.length+1).padStart(4,'0')}`;
             const now = new Date().toISOString();
             const deadline = new Date(Date.now() + (allSlaRules.find(s => s.priority === result.priority)?.targetHours ?? 24) * 3600 * 1000).toISOString();
@@ -652,10 +663,10 @@ export default function PICPage() {
                 { type: 'system', time: now, text: `Auto-routing: App=${result.app}, Task=${result.specificTask}, Priority=${result.priority}, PIC=${result.assignedName}` },
               ],
             };
-            ticketStore.add(newTicket);
             setTickets(prev => [newTicket, ...prev]);
             setSelectedId(newId);
             setShowEmailSim(false);
+            await insertTicket(newTicket);
           }}
         />
       )}

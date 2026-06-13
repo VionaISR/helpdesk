@@ -417,6 +417,9 @@ export const emailConfig: EmailConfig = {
   publicKey:   process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY   || 'aGluLAZ_MmdI2H_Uy',
   serviceId:   process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID   || 'service_3j2q4fe',
   templateId:  process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID  || 'template_pz8ss63',
+  // Set this to your EmailJS "welcome / credentials" template id. No default —
+  // the credentials email only sends once you configure your own template.
+  welcomeTemplateId: process.env.NEXT_PUBLIC_EMAILJS_WELCOME_TEMPLATE_ID || '',
   fromEmail:   process.env.NEXT_PUBLIC_EMAILJS_FROM_EMAIL   || 'vinraylibra23@gmail.com',
   notifyEmail: process.env.NEXT_PUBLIC_EMAILJS_NOTIFY_EMAIL || 'yudisyudis0@gmail.com',
 };

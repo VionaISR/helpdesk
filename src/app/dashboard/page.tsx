@@ -4,11 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import emailjs from '@emailjs/browser';
 import { getSession, logout } from '@/lib/auth';
-import { ticketStore } from '@/lib/store';
+import { useTickets, insertTicket, appendTicketEvent, updateTicketFields } from '@/lib/ticket-store';
 import { emailConfig, specificTasks } from '@/lib/data';
 import { useMasterData } from '@/lib/master-data';
 import { formatDate, formatDateTime, timeAgo, statusClass, generateTicketId } from '@/lib/utils';
-import type { Ticket, Session, PIC, Team, App, SlaRule, KBArticle, Attachment, Comment } from '@/types';
+import type { Ticket, Session, PIC, Team, App, SlaRule, KBArticle, Attachment, Comment, ActivityItem } from '@/types';
 
 const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -84,7 +84,7 @@ function SubmitModal({ session, allPics, allTeams, allApps, allSlaRules, onClose
     setAttachments(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!isValid) return;
     const now = new Date().toISOString();
     const ticket: Ticket = {
@@ -111,7 +111,7 @@ function SubmitModal({ session, allPics, allTeams, allApps, allSlaRules, onClose
       activity: [{ type: 'system', time: now, text: `Tiket dibuat. PIC auto-assign: ${assignedPic?.name ?? 'Unassigned'} (dari routing rules)` }],
       isNew: true,
     };
-    ticketStore.add(ticket);
+    await insertTicket(ticket);
     onSubmit(ticket);
   };
 
@@ -246,8 +246,8 @@ function SubmitModal({ session, allPics, allTeams, allApps, allSlaRules, onClose
 }
 
 // ─── TICKET DETAIL MODAL ──────────────────────────────────────────────────────
-function TicketDetailModal({ ticket, session, onAddComment, onClose }: { ticket: Ticket; session: Session; onAddComment: (id: string, comment: Omit<Comment, 'isInternal'>) => void; onClose: () => void }) {
-  const [rating, setRating] = useState(0);
+function TicketDetailModal({ ticket, session, onAddComment, onRate, onClose }: { ticket: Ticket; session: Session; onAddComment: (id: string, comment: Omit<Comment, 'isInternal'>) => void; onRate: (id: string, rating: number) => void; onClose: () => void }) {
+  const [rating, setRating] = useState(ticket.csat ?? 0);
   const [reply, setReply] = useState('');
   const isDone   = ticket.status === 'Done';
   const isClosed = ticket.status === 'Closed';
@@ -336,10 +336,10 @@ function TicketDetailModal({ ticket, session, onAddComment, onClose }: { ticket:
               <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:12 }}>Bagaimana penanganannya?</div>
               <div style={{ display:'flex', gap:8 }}>
                 {[1,2,3,4,5].map(n => (
-                  <button key={n} className={`btn btn-sm ${rating === n ? 'btn-primary' : 'btn-secondary'}`} style={{ minWidth:40 }} onClick={() => setRating(n)}>{n}★</button>
+                  <button key={n} className={`btn btn-sm ${rating >= n ? 'btn-primary' : 'btn-secondary'}`} style={{ minWidth:40 }} onClick={() => { setRating(n); onRate(ticket.id, n); }}>{n}★</button>
                 ))}
               </div>
-              {rating > 0 && <div style={{ fontSize:12, color:'var(--status-done)', marginTop:10 }}>Terima kasih atas penilaianmu!</div>}
+              {rating > 0 && <div style={{ fontSize:12, color:'var(--status-done)', marginTop:10 }}>Terima kasih atas penilaianmu! Rating tersimpan.</div>}
             </div>
           )}
         </div>
@@ -478,31 +478,19 @@ function KBPage({ allKbArticles }: { allKbArticles: KBArticle[] }) {
 export default function DashboardPage() {
   const router = useRouter();
   const { teams: allTeams, pics: allPics, apps: allApps, slaRules: allSlaRules, kbArticles: allKbArticles, loading: masterLoading } = useMasterData();
+  const { tickets: allTickets, setTickets: setAllTickets, loading: ticketsLoading } = useTickets();
   const [session, setSession] = useState<Session | null>(null);
   const [page, setPage] = useState('home');
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [showSubmit, setShowSubmit] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
-  const [myTickets, setMyTickets] = useState<Ticket[]>([]);
   const [currentNav, setCurrentNav] = useState<'home' | 'tickets' | 'kb'>('home');
 
   useEffect(() => {
     const s = getSession();
     if (!s) { router.replace('/login'); return; }
     setSession(s);
-    setMyTickets(ticketStore.getAll().filter(t => t.from === s.email));
   }, [router]);
-
-  useEffect(() => {
-    if (!session) return;
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === ticketStore.KEY) {
-        setMyTickets(ticketStore.getAll().filter(t => t.from === session.email));
-      }
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, [session]);
 
   const showToast = (msg: string, type = 'success') => {
     setToast({ msg, type });
@@ -529,18 +517,19 @@ export default function DashboardPage() {
     }
   };
 
-  const addComment = (id: string, comment: Omit<Comment, 'isInternal'>) => {
-    const all = ticketStore.getAll();
-    const next = all.map(t => {
-      if (t.id !== id) return t;
-      const cmt: Comment = { ...comment, isInternal: false };
-      const newT: Ticket = { ...t, comments: [...(t.comments || []), cmt], updatedAt: new Date().toISOString() };
-      newT.activity = [...(t.activity || []), { type: 'comment', time: comment.time, who: comment.authorName, isInternal: false }];
-      return newT;
-    });
-    ticketStore.saveAll(next);
-    const updated = next.find(t => t.id === id);
-    if (updated) setMyTickets(prev => prev.map(t => t.id === id ? updated : t));
+  const addComment = async (id: string, comment: Omit<Comment, 'isInternal'>) => {
+    const target = allTickets.find(t => t.id === id);
+    if (!target) return;
+    const cmt: Comment = { ...comment, isInternal: false };
+    const activityItem: ActivityItem = { type: 'comment', time: comment.time, who: comment.authorName, isInternal: false };
+    const updatedAt = new Date().toISOString();
+    setAllTickets(prev => prev.map(t => t.id === id ? { ...t, comments: [...(t.comments || []), cmt], activity: [...(t.activity || []), activityItem], updatedAt } : t));
+    await appendTicketEvent(id, { comments: [cmt], activity: [activityItem] });
+  };
+
+  const saveCsat = async (id: string, rating: number) => {
+    setAllTickets(prev => prev.map(t => t.id === id ? { ...t, csat: rating } : t));
+    await updateTicketFields(id, { csat: rating });
   };
 
   // Nav page handler
@@ -549,7 +538,9 @@ export default function DashboardPage() {
     setPage(nav === 'home' ? 'home' : nav === 'tickets' ? 'tickets' : 'kb');
   };
 
-  if (!session || masterLoading) return null;
+  if (!session || masterLoading || ticketsLoading) return null;
+
+  const myTickets = allTickets.filter(t => t.from === session.email);
 
   const stats = {
     open:  myTickets.filter(t => ['Open','In Progress','Pending','Revisi'].includes(t.status)).length,
@@ -603,7 +594,7 @@ export default function DashboardPage() {
           allApps={allApps}
           allSlaRules={allSlaRules}
           onClose={() => setShowSubmit(false)}
-          onSubmit={t => { setMyTickets(prev => [t, ...prev]); setShowSubmit(false); sendTicketEmail(t); }}
+          onSubmit={t => { setAllTickets(prev => [t, ...prev]); setShowSubmit(false); sendTicketEmail(t); }}
         />
       )}
       {selectedTicket && (
@@ -611,6 +602,7 @@ export default function DashboardPage() {
           ticket={selectedTicket}
           session={session}
           onAddComment={addComment}
+          onRate={saveCsat}
           onClose={() => setSelectedTicketId(null)}
         />
       )}
