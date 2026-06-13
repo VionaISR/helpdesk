@@ -20,6 +20,13 @@ export interface ActivityItem {
   isInternal?: boolean;
 }
 
+export interface Attachment {
+  name: string;
+  type: string;
+  size: number;
+  dataUrl: string;
+}
+
 export interface Ticket {
   id: string;
   subject: string;
@@ -42,7 +49,7 @@ export interface Ticket {
   updatedAt: string;
   slaDeadline: string;
   resolvedAt?: string;
-  attachments: unknown[];
+  attachments: Attachment[];
   comments: Comment[];
   activity: ActivityItem[];
   isNew?: boolean;

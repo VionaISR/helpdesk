@@ -780,7 +780,12 @@ Response:
 ```
 Frontend    : Next.js 15 (App Router) + TypeScript
 Styling     : CSS Custom Properties
-Data Store  : Browser localStorage (prototype — belum ada backend database)
+Data Store  : Hybrid (migrasi bertahap)
+              - Master data (teams, pics, categories, app routing, SLA rules,
+                KB articles) → Supabase Postgres (lihat supabase/schema.sql
+                & supabase/seed.sql)
+              - Tickets, comments, timeline & auth → masih Browser
+                localStorage, menyusul di fase berikutnya
 Auth        : Local session (email lookup terhadap akun terdaftar, localStorage)
 Email       : Resend (3.000 email/bulan gratis)
 Deploy      : Netlify
@@ -818,8 +823,10 @@ src/
 │   ├── timeline/
 │   └── sla-indicator/
 ├── lib/
-│   ├── data.ts                 # Static seed data
-│   ├── master-data.ts          # localStorage-backed master data (teams, PIC, apps, SLA, KB)
+│   ├── data.ts                 # Static seed data (source-of-truth for supabase/seed.sql)
+│   ├── master-data.ts          # Supabase-backed master data (teams, PIC, categories, apps, SLA, KB)
+│   ├── supabase/
+│   │   └── client.ts           # Browser Supabase client (anon key)
 │   ├── auth.ts
 │   ├── routing-engine.ts      # Auto-route logic
 │   └── sla-calculator.ts

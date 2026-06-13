@@ -1,66 +1,159 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Team, PIC, Category, App, SlaRule, KBArticle } from '@/types';
-import {
-  teams as seedTeams,
-  pics as seedPics,
-  categories as seedCategories,
-  apps as seedApps,
-  slaRules as seedSlaRules,
-  kbArticles as seedKbArticles,
-} from '@/lib/data';
+import { supabase } from '@/lib/supabase/client';
 import { SEED_ACCOUNTS } from '@/lib/account-store';
 import { userStore } from '@/lib/user-store';
 
-const KEYS = {
-  pics: 'helpdesk_pics',
-  categories: 'helpdesk_categories',
-  apps: 'helpdesk_apps',
-  slaRules: 'helpdesk_sla_rules',
-  kbArticles: 'helpdesk_kb_articles',
-};
+// ─── ROW <-> TYPE MAPPING ────────────────────────────────────────────────────
+// Master data (teams, pics, categories, app_routing, sla_rules, kb_articles)
+// now lives in Supabase. These interfaces describe the snake_case Postgres
+// columns; the map* functions convert them to the camelCase app types.
 
-function isBrowser(): boolean {
-  return typeof window !== 'undefined';
+interface TeamRow {
+  id: string;
+  name: string;
+  head_pic_id: string | null;
+  head_name: string | null;
+  head_email: string | null;
+  role: string | null;
 }
 
-function loadStore<T>(key: string, seed: T[]): T[] {
-  if (!isBrowser()) return JSON.parse(JSON.stringify(seed));
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw) return JSON.parse(raw) as T[];
-  } catch { /* ignore */ }
-  const seeded = JSON.parse(JSON.stringify(seed)) as T[];
-  localStorage.setItem(key, JSON.stringify(seeded));
-  return seeded;
+interface PicRow {
+  id: string;
+  name: string;
+  email: string | null;
+  initials: string | null;
+  team_id: string | null;
+  is_head: boolean | null;
+  sub_team: string | null;
 }
 
-function saveStore<T>(key: string, items: T[]): void {
-  if (!isBrowser()) return;
-  localStorage.setItem(key, JSON.stringify(items));
+interface CategoryRow {
+  id: string;
+  name: string;
+  color: string | null;
 }
 
-function slugifyAppName(name: string): string {
-  return 'app-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+interface AppRoutingRow {
+  id: string;
+  app_name: string;
+  app_prefix: string | null;
+  app_keywords: string[] | null;
+  team_id: string | null;
+  primary_pic_id: string | null;
 }
 
-function seedAppsWithIds(): App[] {
-  return seedApps.map(a => ({ ...a, id: a.id ?? slugifyAppName(a.name) }));
+interface SlaRuleRow {
+  id: string;
+  priority: string;
+  target_hours: number;
+  warning_percent: number;
+}
+
+interface KbArticleRow {
+  id: string;
+  title: string;
+  body: string | null;
+  category: string | null;
+  is_published: boolean | null;
+  views: number | null;
+  updated_at: string | null;
+  created_at: string | null;
+}
+
+function mapTeam(row: TeamRow, memberIds: string[]): Team {
+  return {
+    id: row.id,
+    name: row.name,
+    headId: row.head_pic_id ?? '',
+    headName: row.head_name ?? '',
+    headEmail: row.head_email ?? '',
+    role: row.role ?? undefined,
+    memberIds,
+  };
+}
+
+function mapPic(row: PicRow): PIC {
+  return {
+    id: row.id,
+    name: row.name,
+    initials: row.initials ?? '',
+    teamId: row.team_id ?? '',
+    isHead: row.is_head ?? undefined,
+    email: row.email ?? '',
+    subTeam: row.sub_team ?? undefined,
+  };
+}
+
+function mapCategory(row: CategoryRow): Category {
+  return { id: row.id, name: row.name, color: row.color ?? '' };
+}
+
+function mapApp(row: AppRoutingRow): App {
+  return {
+    id: row.id,
+    name: row.app_name,
+    prefix: row.app_prefix ?? '',
+    teamId: row.team_id,
+    keywords: row.app_keywords ?? [],
+    picId: row.primary_pic_id,
+  };
+}
+
+function mapSlaRule(row: SlaRuleRow): SlaRule {
+  return {
+    id: row.id,
+    priority: row.priority as SlaRule['priority'],
+    targetHours: row.target_hours,
+    warningPercent: row.warning_percent,
+  };
+}
+
+function mapKbArticle(row: KbArticleRow): KBArticle {
+  return {
+    id: row.id,
+    title: row.title,
+    category: row.category ?? '',
+    views: row.views ?? 0,
+    updated: (row.updated_at ?? row.created_at ?? '').slice(0, 10),
+    body: row.body ?? undefined,
+    isPublished: row.is_published ?? undefined,
+  };
+}
+
+function logError(action: string, error: { message: string } | null): void {
+  if (error) console.error(`[master-data] ${action} failed:`, error.message);
 }
 
 export async function fetchMasterData(): Promise<{ teams: Team[]; pics: PIC[]; categories: Category[]; apps: App[]; slaRules: SlaRule[]; kbArticles: KBArticle[] }> {
-  const pics = loadStore(KEYS.pics, seedPics);
-  const teams = seedTeams.map(t => ({
-    ...t,
-    memberIds: pics.filter(p => p.teamId === t.id).map(p => p.id),
-  }));
+  const [teamsRes, picsRes, categoriesRes, appsRes, slaRes, kbRes] = await Promise.all([
+    supabase.from('teams').select('*'),
+    supabase.from('pics').select('*'),
+    supabase.from('categories').select('*'),
+    supabase.from('app_routing').select('*').order('created_at'),
+    supabase.from('sla_rules').select('*'),
+    supabase.from('kb_articles').select('*').order('created_at'),
+  ]);
+
+  logError('fetch teams', teamsRes.error);
+  logError('fetch pics', picsRes.error);
+  logError('fetch categories', categoriesRes.error);
+  logError('fetch app_routing', appsRes.error);
+  logError('fetch sla_rules', slaRes.error);
+  logError('fetch kb_articles', kbRes.error);
+
+  const pics = ((picsRes.data ?? []) as PicRow[]).map(mapPic);
+  const teams = ((teamsRes.data ?? []) as TeamRow[]).map(row =>
+    mapTeam(row, pics.filter(p => p.teamId === row.id).map(p => p.id))
+  );
 
   return {
     teams,
     pics,
-    categories: loadStore(KEYS.categories, seedCategories),
-    apps: loadStore(KEYS.apps, seedAppsWithIds()),
-    slaRules: loadStore(KEYS.slaRules, seedSlaRules),
-    kbArticles: loadStore(KEYS.kbArticles, seedKbArticles),
+    categories: ((categoriesRes.data ?? []) as CategoryRow[]).map(mapCategory),
+    apps: ((appsRes.data ?? []) as AppRoutingRow[]).map(mapApp),
+    slaRules: ((slaRes.data ?? []) as SlaRuleRow[]).map(mapSlaRule),
+    kbArticles: ((kbRes.data ?? []) as KbArticleRow[]).map(mapKbArticle),
   };
 }
 
@@ -90,6 +183,8 @@ export function useMasterData() {
 }
 
 // ─── USER PROFILES (Karyawan terdaftar, role='user') ────────────────────────
+// Still backed by localStorage (account-store / user-store) — auth has not
+// been migrated to Supabase yet.
 
 export interface UserProfile {
   id: string;
@@ -114,22 +209,25 @@ export async function fetchUserProfiles(): Promise<UserProfile[]> {
 // ─── PIC CRUD ────────────────────────────────────────────────────────────────
 
 export async function createPic(input: { id: string; name: string; email: string; initials: string }): Promise<void> {
-  const all = loadStore(KEYS.pics, seedPics);
-  all.push({ id: input.id, name: input.name, email: input.email, initials: input.initials, teamId: '' });
-  saveStore(KEYS.pics, all);
+  const { error } = await supabase.from('pics').insert({
+    id: input.id, name: input.name, email: input.email, initials: input.initials, team_id: null,
+  });
+  logError('createPic', error);
 }
 
 export async function updatePic(id: string, input: { name?: string; email?: string; initials?: string }): Promise<void> {
-  const all = loadStore(KEYS.pics, seedPics);
-  const idx = all.findIndex(p => p.id === id);
-  if (idx < 0) return;
-  all[idx] = { ...all[idx], ...input };
-  saveStore(KEYS.pics, all);
+  const patch: Record<string, string> = {};
+  if (input.name !== undefined) patch.name = input.name;
+  if (input.email !== undefined) patch.email = input.email;
+  if (input.initials !== undefined) patch.initials = input.initials;
+  if (Object.keys(patch).length === 0) return;
+  const { error } = await supabase.from('pics').update(patch).eq('id', id);
+  logError('updatePic', error);
 }
 
 export async function deactivatePic(id: string): Promise<void> {
-  const all = loadStore(KEYS.pics, seedPics);
-  saveStore(KEYS.pics, all.filter(p => p.id !== id));
+  const { error } = await supabase.from('pics').delete().eq('id', id);
+  logError('deactivatePic', error);
 }
 
 // ─── CATEGORY CRUD ───────────────────────────────────────────────────────────
@@ -144,89 +242,80 @@ export function nextColor(usedCount: number): string {
 }
 
 export async function createCategory(input: { id: string; name: string; color: string }): Promise<void> {
-  const all = loadStore(KEYS.categories, seedCategories);
-  all.push({ id: input.id, name: input.name, color: input.color });
-  saveStore(KEYS.categories, all);
+  const { error } = await supabase.from('categories').insert({ id: input.id, name: input.name, color: input.color });
+  logError('createCategory', error);
 }
 
 export async function updateCategory(id: string, input: { name?: string; color?: string }): Promise<void> {
-  const all = loadStore(KEYS.categories, seedCategories);
-  const idx = all.findIndex(c => c.id === id);
-  if (idx < 0) return;
-  all[idx] = { ...all[idx], ...input };
-  saveStore(KEYS.categories, all);
+  const patch: Record<string, string> = {};
+  if (input.name !== undefined) patch.name = input.name;
+  if (input.color !== undefined) patch.color = input.color;
+  if (Object.keys(patch).length === 0) return;
+  const { error } = await supabase.from('categories').update(patch).eq('id', id);
+  logError('updateCategory', error);
 }
 
 export async function deleteCategory(id: string): Promise<void> {
-  const all = loadStore(KEYS.categories, seedCategories);
-  saveStore(KEYS.categories, all.filter(c => c.id !== id));
+  const { error } = await supabase.from('categories').delete().eq('id', id);
+  logError('deleteCategory', error);
 }
 
 // ─── APP / ROUTING CRUD ──────────────────────────────────────────────────────
 
 export async function createApp(input: { name: string; prefix: string; keywords: string[] }): Promise<void> {
-  const all = loadStore(KEYS.apps, seedAppsWithIds());
-  const id = `${slugifyAppName(input.name)}-${Date.now().toString(36)}`;
-  all.push({ id, name: input.name, prefix: input.prefix, teamId: null, keywords: input.keywords });
-  saveStore(KEYS.apps, all);
+  const { error } = await supabase.from('app_routing').insert({
+    app_name: input.name, app_prefix: input.prefix, app_keywords: input.keywords, team_id: null,
+  });
+  logError('createApp', error);
 }
 
 export async function updateApp(id: string, input: { name: string; prefix: string }): Promise<void> {
-  const all = loadStore(KEYS.apps, seedAppsWithIds());
-  const idx = all.findIndex(a => a.id === id);
-  if (idx < 0) return;
-  all[idx] = { ...all[idx], name: input.name, prefix: input.prefix };
-  saveStore(KEYS.apps, all);
+  const { error } = await supabase.from('app_routing').update({ app_name: input.name, app_prefix: input.prefix }).eq('id', id);
+  logError('updateApp', error);
 }
 
 export async function deleteApp(id: string): Promise<void> {
-  const all = loadStore(KEYS.apps, seedAppsWithIds());
-  saveStore(KEYS.apps, all.filter(a => a.id !== id));
+  const { error } = await supabase.from('app_routing').delete().eq('id', id);
+  logError('deleteApp', error);
 }
 
 export async function setAppPic(id: string, picId: string | null): Promise<void> {
-  const all = loadStore(KEYS.apps, seedAppsWithIds());
-  const idx = all.findIndex(a => a.id === id);
-  if (idx < 0) return;
-  all[idx] = { ...all[idx], picId };
-  saveStore(KEYS.apps, all);
+  const { error } = await supabase.from('app_routing').update({ primary_pic_id: picId }).eq('id', id);
+  logError('setAppPic', error);
 }
 
 // ─── SLA RULES CRUD ──────────────────────────────────────────────────────────
 
 export async function updateSlaRule(id: string, input: { targetHours?: number; warningPercent?: number }): Promise<void> {
-  const all = loadStore(KEYS.slaRules, seedSlaRules);
-  const idx = all.findIndex(r => r.id === id);
-  if (idx < 0) return;
-  all[idx] = { ...all[idx], ...input };
-  saveStore(KEYS.slaRules, all);
+  const patch: Record<string, number> = {};
+  if (input.targetHours !== undefined) patch.target_hours = input.targetHours;
+  if (input.warningPercent !== undefined) patch.warning_percent = input.warningPercent;
+  if (Object.keys(patch).length === 0) return;
+  const { error } = await supabase.from('sla_rules').update(patch).eq('id', id);
+  logError('updateSlaRule', error);
 }
 
 // ─── KNOWLEDGE BASE CRUD ─────────────────────────────────────────────────────
 
 export async function createKbArticle(input: { title: string; category: string; body: string; isPublished: boolean }): Promise<void> {
-  const all = loadStore(KEYS.kbArticles, seedKbArticles);
-  all.push({
-    id: `kb-${Date.now().toString(36)}`,
-    title: input.title,
-    category: input.category,
-    views: 0,
-    updated: new Date().toISOString().slice(0, 10),
-    body: input.body,
-    isPublished: input.isPublished,
+  const { error } = await supabase.from('kb_articles').insert({
+    title: input.title, category: input.category, body: input.body, is_published: input.isPublished, views: 0,
   });
-  saveStore(KEYS.kbArticles, all);
+  logError('createKbArticle', error);
 }
 
 export async function updateKbArticle(id: string, input: { title?: string; category?: string; body?: string; isPublished?: boolean }): Promise<void> {
-  const all = loadStore(KEYS.kbArticles, seedKbArticles);
-  const idx = all.findIndex(a => a.id === id);
-  if (idx < 0) return;
-  all[idx] = { ...all[idx], ...input, updated: new Date().toISOString().slice(0, 10) };
-  saveStore(KEYS.kbArticles, all);
+  const patch: Record<string, string | boolean> = {};
+  if (input.title !== undefined) patch.title = input.title;
+  if (input.category !== undefined) patch.category = input.category;
+  if (input.body !== undefined) patch.body = input.body;
+  if (input.isPublished !== undefined) patch.is_published = input.isPublished;
+  if (Object.keys(patch).length === 0) return;
+  const { error } = await supabase.from('kb_articles').update(patch).eq('id', id);
+  logError('updateKbArticle', error);
 }
 
 export async function deleteKbArticle(id: string): Promise<void> {
-  const all = loadStore(KEYS.kbArticles, seedKbArticles);
-  saveStore(KEYS.kbArticles, all.filter(a => a.id !== id));
+  const { error } = await supabase.from('kb_articles').delete().eq('id', id);
+  logError('deleteKbArticle', error);
 }

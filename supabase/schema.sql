@@ -14,6 +14,7 @@ create table if not exists teams (
   head_pic_id text,        -- pic_id who is head
   head_name   text,
   head_email  text,
+  role        text,        -- team category label, e.g. 'owner', 'tech', 'admin'
   created_at  timestamptz default now()
 );
 
@@ -24,8 +25,28 @@ create table if not exists pics (
   id          text primary key,  -- e.g., "p-ivan"
   name        text not null,
   email       text,
+  initials    text,
   team_id     text references teams(id),
+  is_head     boolean default false,
+  sub_team    text,
   is_active   boolean default true,
+  created_at  timestamptz default now()
+);
+
+-- For installs that already had teams/pics from an earlier schema version,
+-- backfill the new columns (no-op on fresh installs — already in CREATE TABLE above)
+alter table teams add column if not exists role text;
+alter table pics add column if not exists initials text;
+alter table pics add column if not exists is_head boolean default false;
+alter table pics add column if not exists sub_team text;
+
+-- ============================================================
+-- CATEGORIES (Ticket category labels)
+-- ============================================================
+create table if not exists categories (
+  id          text primary key,  -- e.g., "PRJ"
+  name        text not null,
+  color       text,
   created_at  timestamptz default now()
 );
 
@@ -219,49 +240,69 @@ create table if not exists audit_log (
 -- ROW LEVEL SECURITY
 -- ============================================================
 
--- Teams: readable by all authenticated users, admin only can modify
-alter table teams enable row level security;
-create policy "teams_read" on teams for select using (auth.role() = 'authenticated');
-create policy "teams_write" on teams for all using (
-  exists (select 1 from profiles where id = auth.uid() and role = 'admin')
-);
+-- Master data (teams/pics/categories/app_routing/sla_rules/kb_articles): the
+-- frontend currently connects with the anon key and has NOT adopted Supabase
+-- Auth yet (auth stays on localStorage for now), so these tables are left
+-- open to the anon role. Revisit once auth is migrated to Supabase.
 
--- Pics: readable by all, admin only can modify
+-- Note: every policy below is preceded by `drop policy if exists` so this
+-- script can be re-run safely against a database that already has policies
+-- from a previous version of this file (CREATE POLICY has no IF NOT EXISTS).
+
+-- Teams: anon read/write (prototype phase, no Supabase Auth yet)
+alter table teams enable row level security;
+drop policy if exists "teams_read" on teams;
+create policy "teams_read" on teams for select using (true);
+drop policy if exists "teams_write" on teams;
+create policy "teams_write" on teams for all using (true) with check (true);
+
+-- Pics: anon read/write (prototype phase, no Supabase Auth yet)
 alter table pics enable row level security;
-create policy "pics_read" on pics for select using (auth.role() = 'authenticated');
-create policy "pics_write" on pics for all using (
-  exists (select 1 from profiles where id = auth.uid() and role = 'admin')
-);
+drop policy if exists "pics_read" on pics;
+create policy "pics_read" on pics for select using (true);
+drop policy if exists "pics_write" on pics;
+create policy "pics_write" on pics for all using (true) with check (true);
+
+-- Categories: anon read/write (prototype phase, no Supabase Auth yet)
+alter table categories enable row level security;
+drop policy if exists "categories_read" on categories;
+create policy "categories_read" on categories for select using (true);
+drop policy if exists "categories_write" on categories;
+create policy "categories_write" on categories for all using (true) with check (true);
 
 -- Profiles: users can read all, update only own row
 alter table profiles enable row level security;
+drop policy if exists "profiles_read" on profiles;
 create policy "profiles_read" on profiles for select using (auth.role() = 'authenticated');
+drop policy if exists "profiles_update_own" on profiles;
 create policy "profiles_update_own" on profiles for update using (auth.uid() = id);
+drop policy if exists "profiles_insert" on profiles;
 create policy "profiles_insert" on profiles for insert with check (auth.role() in ('admin'));
 
--- App Routing: readable by authenticated, writable by admin
+-- App Routing: anon read/write (prototype phase, no Supabase Auth yet)
 alter table app_routing enable row level security;
-create policy "app_routing_read" on app_routing for select using (auth.role() = 'authenticated');
-create policy "app_routing_write" on app_routing for all using (
-  exists (select 1 from profiles where id = auth.uid() and role = 'admin')
-);
+drop policy if exists "app_routing_read" on app_routing;
+create policy "app_routing_read" on app_routing for select using (true);
+drop policy if exists "app_routing_write" on app_routing;
+create policy "app_routing_write" on app_routing for all using (true) with check (true);
 
--- App Routing Pics: same as app_routing
+-- App Routing Pics: anon read/write (prototype phase, no Supabase Auth yet)
 alter table app_routing_pics enable row level security;
-create policy "app_routing_pics_read" on app_routing_pics for select using (auth.role() = 'authenticated');
-create policy "app_routing_pics_write" on app_routing_pics for all using (
-  exists (select 1 from profiles where id = auth.uid() and role = 'admin')
-);
+drop policy if exists "app_routing_pics_read" on app_routing_pics;
+create policy "app_routing_pics_read" on app_routing_pics for select using (true);
+drop policy if exists "app_routing_pics_write" on app_routing_pics;
+create policy "app_routing_pics_write" on app_routing_pics for all using (true) with check (true);
 
--- SLA Rules: readable by all, writable by admin
+-- SLA Rules: anon read/write (prototype phase, no Supabase Auth yet)
 alter table sla_rules enable row level security;
-create policy "sla_rules_read" on sla_rules for select using (auth.role() = 'authenticated');
-create policy "sla_rules_write" on sla_rules for all using (
-  exists (select 1 from profiles where id = auth.uid() and role = 'admin')
-);
+drop policy if exists "sla_rules_read" on sla_rules;
+create policy "sla_rules_read" on sla_rules for select using (true);
+drop policy if exists "sla_rules_write" on sla_rules;
+create policy "sla_rules_write" on sla_rules for all using (true) with check (true);
 
 -- Tickets: User sees own, PIC sees team tickets, Admin sees all
 alter table tickets enable row level security;
+drop policy if exists "tickets_read_own" on tickets;
 create policy "tickets_read_own" on tickets for select using (
   exists (
     select 1 from profiles
@@ -281,7 +322,9 @@ create policy "tickets_read_own" on tickets for select using (
     where p.id = auth.uid() and p.role = 'admin'
   )
 );
+drop policy if exists "tickets_insert" on tickets;
 create policy "tickets_insert" on tickets for insert with check (auth.role() = 'authenticated');
+drop policy if exists "tickets_update_team" on tickets;
 create policy "tickets_update_team" on tickets for update using (
   exists (
     select 1 from profiles p
@@ -296,6 +339,7 @@ create policy "tickets_update_team" on tickets for update using (
 
 -- Comments: User sees public comments on own tickets, PIC sees all on team tickets
 alter table comments enable row level security;
+drop policy if exists "comments_read_user" on comments;
 create policy "comments_read_user" on comments for select using (
   not is_internal and exists (
     select 1 from tickets t
@@ -313,10 +357,12 @@ create policy "comments_read_user" on comments for select using (
     )
   )
 );
+drop policy if exists "comments_insert" on comments;
 create policy "comments_insert" on comments for insert with check (auth.role() = 'authenticated');
 
 -- Timeline: same as tickets (user sees own, team sees team, admin sees all)
 alter table ticket_timeline enable row level security;
+drop policy if exists "timeline_read" on ticket_timeline;
 create policy "timeline_read" on ticket_timeline for select using (
   exists (
     select 1 from profiles p
@@ -332,10 +378,12 @@ create policy "timeline_read" on ticket_timeline for select using (
     )
   )
 );
+drop policy if exists "timeline_insert" on ticket_timeline;
 create policy "timeline_insert" on ticket_timeline for insert with check (auth.role() = 'authenticated');
 
 -- Notifications: each user/PIC sees only their own
 alter table notifications enable row level security;
+drop policy if exists "notifications_read_own" on notifications;
 create policy "notifications_read_own" on notifications for select using (
   user_id = auth.uid()
   or
@@ -349,6 +397,7 @@ create policy "notifications_read_own" on notifications for select using (
     where p.id = auth.uid() and p.role = 'admin'
   )
 );
+drop policy if exists "notifications_update_own" on notifications;
 create policy "notifications_update_own" on notifications for update using (
   user_id = auth.uid()
   or exists (
@@ -361,32 +410,29 @@ create policy "notifications_update_own" on notifications for update using (
   )
 );
 
--- KB Articles: published articles readable by all, writable by admin/pic
+-- KB Articles: anon read/write (prototype phase, no Supabase Auth yet)
 alter table kb_articles enable row level security;
-create policy "kb_read_published" on kb_articles for select using (
-  is_published = true
-  or
-  exists (
-    select 1 from profiles p
-    where p.id = auth.uid() and p.role in ('admin', 'pic')
-  )
-);
-create policy "kb_write" on kb_articles for all using (
-  exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('admin', 'pic'))
-);
+drop policy if exists "kb_read" on kb_articles;
+create policy "kb_read" on kb_articles for select using (true);
+drop policy if exists "kb_write" on kb_articles;
+create policy "kb_write" on kb_articles for all using (true) with check (true);
 
 -- Audit Log: admin only
 alter table audit_log enable row level security;
+drop policy if exists "audit_read" on audit_log;
 create policy "audit_read" on audit_log for select using (
   exists (select 1 from profiles p where p.id = auth.uid() and p.role = 'admin')
 );
+drop policy if exists "audit_insert" on audit_log;
 create policy "audit_insert" on audit_log for insert with check (auth.role() = 'authenticated');
 
 -- Import Queue: admin only
 alter table import_queue enable row level security;
+drop policy if exists "import_queue_read" on import_queue;
 create policy "import_queue_read" on import_queue for select using (
   exists (select 1 from profiles p where p.id = auth.uid() and p.role = 'admin')
 );
+drop policy if exists "import_queue_write" on import_queue;
 create policy "import_queue_write" on import_queue for all using (
   exists (select 1 from profiles p where p.id = auth.uid() and p.role = 'admin')
 );
@@ -443,14 +489,17 @@ begin
 end;
 $$ language plpgsql;
 
+drop trigger if exists tr_profiles_updated_at on profiles;
 create trigger tr_profiles_updated_at
   before update on profiles
   for each row execute function update_updated_at();
 
+drop trigger if exists tr_tickets_updated_at on tickets;
 create trigger tr_tickets_updated_at
   before update on tickets
   for each row execute function update_updated_at();
 
+drop trigger if exists tr_kb_updated_at on kb_articles;
 create trigger tr_kb_updated_at
   before update on kb_articles
   for each row execute function update_updated_at();
@@ -471,76 +520,11 @@ end;
 $$ language plpgsql;
 
 -- ============================================================
--- SEED DATA (Initial Teams & PICs)
+-- SEED DATA
 -- ============================================================
-
--- Teams
-insert into teams (id, name, head_pic_id, head_name, head_email) values
-  ('team-ivan', 'Team Ivan', 'p-ivan', 'Ivan', 'ivan@lippoland.id'),
-  ('team-nicholas', 'Team Nicholas', 'p-leo', 'Leo', 'leo@lippoland.id'),
-  ('team-joshua', 'Team Joshua', 'p-joshua', 'Joshua', 'joshua@lippoland.id')
-on conflict (id) do nothing;
-
--- PICs (Team Ivan)
-insert into pics (id, name, email, team_id) values
-  ('p-ivan', 'Ivan', 'ivan@lippoland.id', 'team-ivan'),
-  ('p-apri', 'Apri', 'apri@lippoland.id', 'team-ivan'),
-  ('p-kevin', 'Kevin', 'kevin@lippoland.id', 'team-ivan'),
-  ('p-lukas', 'Lukas', 'lukas@lippoland.id', 'team-ivan')
-on conflict (id) do nothing;
-
--- PICs (Team Nicholas)
-insert into pics (id, name, email, team_id) values
-  ('p-leo', 'Leo', 'leo@lippoland.id', 'team-nicholas'),
-  ('p-nicholas', 'Nicholas', 'nicholas@lippoland.id', 'team-nicholas')
-on conflict (id) do nothing;
-
--- PICs (Team Joshua)
-insert into pics (id, name, email, team_id) values
-  ('p-joshua', 'Joshua', 'joshua@lippoland.id', 'team-joshua'),
-  ('p-christian', 'Cristian', 'cristian@lippoland.id', 'team-joshua')
-on conflict (id) do nothing;
-
--- SLA Rules
-insert into sla_rules (priority, target_hours, warning_percent) values
-  ('Critical', 2, 75),
-  ('High', 8, 75),
-  ('Medium', 24, 75),
-  ('Low', 72, 75)
-on conflict (priority) do nothing;
-
--- Default App Routing (single PIC per app for simplicity)
-insert into app_routing (app_name, app_prefix, team_id, primary_pic_id) values
-  -- Team Ivan
-  ('[PRJ] - Project System', 'PRJ', 'team-ivan', 'p-ivan'),
-  ('[PRJ] - Cash Advance', 'PRJ', 'team-ivan', 'p-apri'),
-  ('[PRJ] - Cashflow', 'PRJ', 'team-ivan', 'p-apri'),
-  ('[PRJ] - AP Management', 'PRJ', 'team-ivan', 'p-apri'),
-  ('[PRJ] - Legal Management System', 'PRJ', 'team-ivan', 'p-ivan'),
-  ('[SLS] - Sales Portal', 'SLS', 'team-ivan', 'p-kevin'),
-  ('[SLS] - Siteplan Report', 'SLS', 'team-ivan', 'p-kevin'),
-  ('[SLS] - Commission System', 'SLS', 'team-ivan', 'p-kevin'),
-  ('[CMN] - Tax System', 'CMN', 'team-ivan', 'p-kevin'),
-  ('[SLS] - Property System', 'SLS', 'team-ivan', 'p-ivan'),
-  -- Team Nicholas
-  ('[PRJ] - Cost Contract', 'PRJ', 'team-nicholas', 'p-leo'),
-  ('[PRJ] - Vendor Portal', 'PRJ', 'team-nicholas', 'p-leo'),
-  ('[PRJ] - Construction Activity', 'PRJ', 'team-nicholas', 'p-leo'),
-  ('[SLS] - Cynergy', 'SLS', 'team-nicholas', 'p-leo'),
-  ('[CMN] - Cynergi', 'CMN', 'team-nicholas', 'p-leo'),
-  -- Team Joshua
-  ('[SLS] - Budget Marketing', 'SLS', 'team-joshua', 'p-joshua'),
-  ('[TMD] - Billing System', 'TMD', 'team-joshua', 'p-joshua'),
-  ('[TMD] - Residential Services', 'TMD', 'team-joshua', 'p-joshua'),
-  ('[TMD] - BCD System', 'TMD', 'team-joshua', 'p-joshua'),
-  ('[TMD] - Hand Over', 'TMD', 'team-joshua', 'p-joshua'),
-  ('[CMN] - Email Blast System', 'CMN', 'team-joshua', 'p-christian'),
-  ('[SLS] - PR Portal', 'SLS', 'team-joshua', 'p-christian'),
-  ('[TMD] - eTMD', 'TMD', 'team-joshua', 'p-christian'),
-  ('[TMD] - Online Payment', 'TMD', 'team-joshua', 'p-christian'),
-  ('[TMD] - Cashier System', 'TMD', 'team-joshua', 'p-christian'),
-  ('[TMD] - LEAP', 'TMD', 'team-joshua', 'p-christian')
-on conflict do nothing;
+-- Master data (teams, pics, categories, app_routing, sla_rules,
+-- kb_articles) is NOT seeded here. Run supabase/seed.sql after this
+-- file — it contains the full, idempotent dataset matching src/lib/data.ts.
 
 -- ============================================================
 -- DONE

@@ -1,6 +1,7 @@
 -- IT Helpdesk — Full Seed Data
 -- Jalankan SETELAH schema.sql di Supabase SQL Editor
--- File ini: data master lengkap (teams, PICs, apps, SLA, KB)
+-- File ini: data master lengkap (teams, PICs, categories, apps, SLA, KB)
+-- Sumber kebenaran: src/lib/data.ts
 -- Aman dijalankan berulang (idempotent)
 
 -- ============================================================
@@ -9,6 +10,7 @@
 delete from app_routing_pics;
 delete from app_routing;
 delete from kb_articles;
+delete from categories;
 delete from pics;
 delete from teams;
 delete from sla_rules;
@@ -16,35 +18,49 @@ delete from sla_rules;
 -- ============================================================
 -- TEAMS (5 tim)
 -- ============================================================
-insert into teams (id, name, head_pic_id, head_name, head_email) values
-  ('team-license',  'License Admin',            'p-license',  'License Admin',     'license.admin@lippo.id'),
-  ('team-ivan',     'Ivan Tenusa Team',          'p-ivan',     'Ivan Tenusa',       'ivan.tenusa@lippo.id'),
-  ('team-nicholas', 'Nicholas Suryatama Team',   'p-nicholas', 'Nicholas Suryatama','nicholas.suryatama@lippo.id'),
-  ('team-joshua',   'Joshua Kartono Team',       'p-joshua',   'Joshua Kartono',    'joshua.kartono@lippo.id'),
-  ('team-andika',   'Rachmad Andika Team',       'p-andika',   'Rachmad Andika',    'andika@lippoland.id');
+insert into teams (id, name, head_pic_id, head_name, head_email, role) values
+  ('team-license',  'License Admin',            'p-license',  'License Admin',      'license.admin@ithelpdesk.com',      'owner'),
+  ('team-ivan',     'Ivan Tenusa Team',          'p-ivan',     'Ivan Tenusa',        'ivan.tenusa@ithelpdesk.com',        'tech'),
+  ('team-nicholas', 'Nicholas Suryatama Team',   'p-nicholas', 'Nicholas Suryatama', 'nicholas.suryatama@ithelpdesk.com', 'tech'),
+  ('team-joshua',   'Joshua Kartono Team',       'p-joshua',   'Joshua Kartono',     'joshua.kartono@ithelpdesk.com',     'admin'),
+  ('team-andika',   'Rachmad Andika Team',       'p-andika',   'Rachmad Andika',     'andika@ithelpdesk.com',             'admin');
 
 -- ============================================================
 -- PICs (13 orang)
 -- ============================================================
-insert into pics (id, name, email, team_id) values
+insert into pics (id, name, email, initials, team_id, is_head, sub_team) values
   -- team-license
-  ('p-license',  'License Admin',      'license.admin@lippo.id',      'team-license'),
-  ('p-lady',     'Lady Yohana',        'lady.yohana@lippo.id',        'team-license'),
-  ('p-eric',     'Eric Yonalis',       'eric.yonalis@lippo.id',       'team-license'),
-  ('p-vio',      'Viona',              'viona@lippo.id',              'team-license'),
+  ('p-license',  'License Admin',      'license.admin@ithelpdesk.com',      'LA', 'team-license', true,  null),
+  ('p-lady',     'Lady Yohana',        'lady.yohana@ithelpdesk.com',        'LY', 'team-license', false, null),
+  ('p-eric',     'Eric Yonalis',       'eric.yonalis@ithelpdesk.com',       'EY', 'team-license', false, null),
+  ('p-vio',      'Viona',              'viona@ithelpdesk.com',              'VI', 'team-license', false, null),
   -- team-ivan
-  ('p-ivan',     'Ivan Tenusa',        'ivan.tenusa@lippo.id',        'team-ivan'),
-  ('p-apri',     'Apri',               'apri@lippo.id',               'team-ivan'),
-  ('p-kevin',    'Kevin',              'kevin@lippo.id',              'team-ivan'),
-  ('p-lukas',    'Lukas Wijaya K',     'lukas.wijaya@lippo.id',       'team-ivan'),
+  ('p-ivan',     'Ivan Tenusa',        'ivan.tenusa@ithelpdesk.com',        'IT', 'team-ivan', true,  'prosys-budget'),
+  ('p-apri',     'Apri',               'apri@ithelpdesk.com',               'AP', 'team-ivan', false, 'prosys-budget'),
+  ('p-kevin',    'Kevin',              'kevin@ithelpdesk.com',              'KV', 'team-ivan', false, 'sales-tax'),
+  ('p-lukas',    'Lukas Wijaya K',     'lukas.wijaya@ithelpdesk.com',       'LW', 'team-ivan', false, 'sales-tax'),
   -- team-nicholas
-  ('p-nicholas', 'Nicholas Suryatama', 'nicholas.suryatama@lippo.id', 'team-nicholas'),
-  ('p-leo',      'Leonagata',          'leonagata@lippo.id',          'team-nicholas'),
+  ('p-nicholas', 'Nicholas Suryatama', 'nicholas.suryatama@ithelpdesk.com', 'NS', 'team-nicholas', true,  null),
+  ('p-leo',      'Leonagata',          'leonagata@ithelpdesk.com',          'LE', 'team-nicholas', false, null),
   -- team-joshua
-  ('p-joshua',   'Joshua Kartono',     'joshua.kartono@lippo.id',     'team-joshua'),
-  ('p-christian','Christian',          'christian@lippo.id',          'team-joshua'),
+  ('p-joshua',   'Joshua Kartono',     'joshua.kartono@ithelpdesk.com',     'JK', 'team-joshua', true,  null),
+  ('p-christian','Christian',          'christian@ithelpdesk.com',          'CH', 'team-joshua', false, null),
   -- team-andika
-  ('p-andika',   'Rachmad Andika',     'andika@lippoland.id',         'team-andika');
+  ('p-andika',   'Rachmad Andika',     'andika@ithelpdesk.com',             'RA', 'team-andika', true,  null);
+
+-- ============================================================
+-- CATEGORIES (9 kategori)
+-- ============================================================
+insert into categories (id, name, color) values
+  ('PRJ', 'Project',             '#2563eb'),
+  ('TMD', 'TMD',                 '#0891b2'),
+  ('CMN', 'Common',              '#7c3aed'),
+  ('COR', 'Corporate',           '#9333ea'),
+  ('SDH', 'Burial',              '#475569'),
+  ('SLS', 'Sales',               '#16a34a'),
+  ('RPT', 'Report',              '#ca8a04'),
+  ('BAS', 'Building Automation', '#dc2626'),
+  ('OTH', 'Others',              '#64748b');
 
 -- ============================================================
 -- SLA RULES
@@ -127,6 +143,8 @@ insert into app_routing (app_name, app_prefix, app_keywords, team_id, primary_pi
   ('[SLS] - Midtrans',                'SLS', ARRAY['midtrans'],                                         null,            null),
   ('[SLS] - Dynamics',                'SLS', ARRAY['dynamics'],                                         null,            null),
   ('[SLS] - Sharepoint',              'SLS', ARRAY['sharepoint'],                                       null,            null),
+  ('[SLS] - Website',                 'SLS', ARRAY['website'],                                          'team-ivan',     'p-apri'),
+  ('[SLS] - iforte',                  'SLS', ARRAY['iforte'],                                           'team-ivan',     'p-kevin'),
 
   -- ── RPT ──────────────────────────────────────────────────
   ('[RPT] - Report Geneva',           'RPT', ARRAY['report geneva','geneva'],                           null,            null),
@@ -147,13 +165,13 @@ insert into app_routing (app_name, app_prefix, app_keywords, team_id, primary_pi
 -- ============================================================
 -- KB ARTICLES (6 artikel awal)
 -- ============================================================
-insert into kb_articles (title, category, views, is_published, updated_at) values
-  ('Cara request akses Sales Portal',         'SLS', 342, true, '2026-05-20'),
-  ('Setup VPN untuk WFH',                     'OTH', 287, true, '2026-05-15'),
-  ('Troubleshoot Cost Contract generate PO',  'PRJ', 198, true, '2026-05-10'),
-  ('Format request Data On Demand',           'OTH', 156, true, '2026-05-08'),
-  ('Cara submit promote production request',  'OTH', 134, true, '2026-05-05'),
-  ('Email Blast - panduan template baru',     'CMN', 98,  true, '2026-04-28');
+insert into kb_articles (title, category, views, is_published, updated_at, body) values
+  ('Cara request akses Sales Portal',        'SLS', 342, true, '2026-05-20', 'Untuk request akses Sales Portal, kirimkan email ke helpdesk dengan menyebutkan nama lengkap, email perusahaan, dan level akses yang dibutuhkan (view-only atau full access). Tim PIC akan memproses dalam 1 hari kerja.'),
+  ('Setup VPN untuk WFH',                    'OTH', 287, true, '2026-05-15', 'Download aplikasi VPN client sesuai panduan IT, lalu login menggunakan akun email perusahaan. Jika gagal connect, pastikan koneksi internet stabil dan coba restart aplikasi VPN.'),
+  ('Troubleshoot Cost Contract generate PO', 'PRJ', 198, true, '2026-05-10', 'Jika generate PO gagal, cek apakah semua field wajib (vendor, item, jumlah) sudah terisi. Refresh halaman dan coba ulang. Jika masih error, sertakan screenshot pesan error saat membuat tiket.'),
+  ('Format request Data On Demand',          'OTH', 156, true, '2026-05-08', 'Sertakan nama aplikasi, periode data, kolom/field yang dibutuhkan, dan format file (Excel/CSV) saat mengajukan request data on demand agar dapat diproses lebih cepat.'),
+  ('Cara submit promote production request', 'OTH', 134, true, '2026-05-05', 'Sertakan nama aplikasi, deskripsi perubahan, dan environment tujuan (staging/production) saat mengajukan promote to production. Request akan direview oleh PIC terkait sebelum dieksekusi.'),
+  ('Email Blast - panduan template baru',    'CMN', 98,  true, '2026-04-28', 'Template email blast baru mendukung personalisasi nama penerima dan logo dinamis per project. Hubungi tim CMN untuk akses template editor.');
 
 -- ============================================================
 -- SELESAI

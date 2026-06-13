@@ -225,12 +225,6 @@ function TicketDetail({ ticket, allPics, allTeams, allCategories, onUpdate, onAd
               <div className={`sla-fill sla-${sla.status}`} style={{ width: `${sla.pct}%` }}></div>
             </div>
           </div>
-          {ticket.attachments.length > 0 && (
-            <div className="sw-meta-row">
-              <span className="sw-meta-label">Attachments:</span>
-              <span className="sw-meta-text">{ticket.attachments.length} file</span>
-            </div>
-          )}
         </div>
         <div className="sw-ticket-body-block">
           <div className="sw-ticket-from">
@@ -238,6 +232,21 @@ function TicketDetail({ ticket, allPics, allTeams, allCategories, onUpdate, onAd
             <div className="sw-ticket-from-email">{ticket.from}</div>
           </div>
           <div className="sw-ticket-body">{ticket.body}</div>
+          {ticket.attachments.length > 0 && (
+            <div style={{ display:'flex', flexWrap:'wrap', gap:10, marginTop:14 }}>
+              {ticket.attachments.map((a, i) => (
+                a.type.startsWith('image/') ? (
+                  <a key={i} href={a.dataUrl} target="_blank" rel="noopener noreferrer">
+                    <img src={a.dataUrl} alt={a.name} style={{ width:90, height:90, objectFit:'cover', borderRadius:8, border:'1px solid var(--border)' }} />
+                  </a>
+                ) : (
+                  <a key={i} href={a.dataUrl} download={a.name} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background:'var(--surface-2)', borderRadius:8, fontSize:12, textDecoration:'none', color:'var(--text)' }}>
+                    📄 {a.name}
+                  </a>
+                )
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="sw-activity-feed">
@@ -287,9 +296,6 @@ function TicketDetail({ ticket, allPics, allTeams, allCategories, onUpdate, onAd
               onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) submitComment(); }}
             />
             <div className="sw-comment-toolbar">
-              <button className="sw-btn-tool">B</button>
-              <button className="sw-btn-tool">I</button>
-              <button className="sw-btn-tool">📎</button>
               <button className="btn-primary sw-btn-sm" style={{ marginLeft:'auto' }} onClick={submitComment}>Kirim</button>
             </div>
           </div>

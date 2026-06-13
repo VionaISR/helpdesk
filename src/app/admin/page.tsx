@@ -73,16 +73,6 @@ function ConfirmModal({ message, onConfirm, onClose }: { message: string; onConf
   );
 }
 
-// ─── NAV LINK COMPONENT ───────────────────────────────────────────────────────
-function NavLink({ icon, label, active, onClick }: { icon: string; label: string; active?: boolean; onClick: () => void }) {
-  return (
-    <div className={`sw-nav-link${active?' active':''}`} onClick={onClick}>
-      <span className="nav-icon">{icon}</span>
-      <span>{label}</span>
-    </div>
-  );
-}
-
 function NavItem({ label, count, active, onClick }: { label: string; count?: number; active: boolean; onClick: () => void }) {
   return (
     <a className={`nav-item${active?' active':''}`} onClick={onClick}>
@@ -2250,16 +2240,6 @@ export default function AdminPage() {
     <div className="sw-app" style={{ flexDirection: 'column' }}>
       <div className="sw-topbar">
         <div className="sw-logo">🛠 IT Helpdesk</div>
-        <nav className="sw-nav">
-          <NavLink icon="📊" label="Dashboard" active={page === 'dashboard'} onClick={() => setPage('dashboard')} />
-          <NavLink icon="🎫" label="Tiket" active={page === 'tickets'} onClick={() => setPage('tickets')} />
-          <NavLink icon="🔧" label="Routing Rules" active={page === 'routing'} onClick={() => setPage('routing')} />
-          <NavLink icon="📚" label="Knowledge Base" active={page === 'kb'} onClick={() => setPage('kb')} />
-          <NavLink icon="📈" label="Reports" active={page === 'reporting'} onClick={() => setPage('reporting')} />
-          <NavLink icon="📱" label="Aplikasi" active={page === 'apps'} onClick={() => setPage('apps')} />
-          <NavLink icon="⚙️" label="Config" active={page === 'config'} onClick={() => setPage('config')} />
-          <NavLink icon="👥" label="Users" active={page === 'users'} onClick={() => setPage('users')} />
-        </nav>
         <div className="sw-topbar-right">
           <div className="sw-user-avatar">{session.initials}</div>
           <button style={{ fontSize:11, padding:'6px 12px', border:'1px solid var(--border)', borderRadius:6, background:'none', color:'var(--text-secondary)', cursor:'pointer' }} onClick={() => { logout(); router.replace('/login'); }}>Logout</button>

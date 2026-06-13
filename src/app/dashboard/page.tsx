@@ -8,7 +8,9 @@ import { ticketStore } from '@/lib/store';
 import { emailConfig, specificTasks } from '@/lib/data';
 import { useMasterData } from '@/lib/master-data';
 import { formatDate, formatDateTime, timeAgo, statusClass, generateTicketId } from '@/lib/utils';
-import type { Ticket, Session, PIC, Team, App, SlaRule, KBArticle } from '@/types';
+import type { Ticket, Session, PIC, Team, App, SlaRule, KBArticle, Attachment, Comment } from '@/types';
+
+const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024; // 5MB
 
 // ─── NAV LINK COMPONENT ───────────────────────────────────────────────────────
 function NavLink({ icon, label, active, onClick }: { icon: string; label: string; active?: boolean; onClick: () => void }) {
@@ -35,6 +37,8 @@ function Toast({ toast }: { toast: { msg: string; type: string } }) {
 // ─── SUBMIT MODAL ─────────────────────────────────────────────────────────────
 function SubmitModal({ session, allPics, allTeams, allApps, allSlaRules, onClose, onSubmit }: { session: Session; allPics: PIC[]; allTeams: Team[]; allApps: App[]; allSlaRules: SlaRule[]; onClose: () => void; onSubmit: (t: Ticket) => void }) {
   const [form, setForm] = useState({ subject: '', body: '', appName: '', specificTask: '' });
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [fileError, setFileError] = useState('');
   const [appSearch, setAppSearch] = useState('');
   const [appOpen, setAppOpen] = useState(false);
   const appRef = React.useRef<HTMLDivElement>(null);
@@ -59,6 +63,27 @@ function SubmitModal({ session, allPics, allTeams, allApps, allSlaRules, onClose
 
   const isValid = form.subject && form.appName && form.body;
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    setFileError('');
+    files.forEach(file => {
+      if (file.size > MAX_ATTACHMENT_SIZE) {
+        setFileError(`${file.name} melebihi 5MB, tidak diupload.`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAttachments(prev => [...prev, { name: file.name, type: file.type, size: file.size, dataUrl: reader.result as string }]);
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
+  const removeAttachment = (idx: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const submit = () => {
     if (!isValid) return;
     const now = new Date().toISOString();
@@ -82,7 +107,7 @@ function SubmitModal({ session, allPics, allTeams, allApps, allSlaRules, onClose
       updatedAt: now,
       slaDeadline: new Date(Date.now() + (allSlaRules.find(s => s.priority === 'Medium')?.targetHours ?? 24) * 3600 * 1000).toISOString(),
       comments: [],
-      attachments: [],
+      attachments,
       activity: [{ type: 'system', time: now, text: `Tiket dibuat. PIC auto-assign: ${assignedPic?.name ?? 'Unassigned'} (dari routing rules)` }],
       isNew: true,
     };
@@ -195,8 +220,20 @@ function SubmitModal({ session, allPics, allTeams, allApps, allSlaRules, onClose
           </div>
           <div className="field">
             <label className="label">Lampiran (opsional)</label>
-            <input type="file" className="input" style={{ padding: '8px 12px' }} />
-            <div className="field-hint">Screenshot atau file pendukung. Max 5MB.</div>
+            <input type="file" className="input" style={{ padding: '8px 12px' }} multiple accept="image/*,.pdf" onChange={handleFileChange} />
+            <div className="field-hint">Screenshot atau file pendukung (gambar/PDF). Max 5MB per file.</div>
+            {fileError && <div className="field-hint" style={{ color: '#dc2626' }}>{fileError}</div>}
+            {attachments.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                {attachments.map((a, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, background: 'var(--surface-2)', padding: '6px 10px', borderRadius: 6 }}>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📎 {a.name}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{(a.size / 1024).toFixed(0)} KB</span>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => removeAttachment(i)}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <div className="modal-footer">
@@ -209,10 +246,24 @@ function SubmitModal({ session, allPics, allTeams, allApps, allSlaRules, onClose
 }
 
 // ─── TICKET DETAIL MODAL ──────────────────────────────────────────────────────
-function TicketDetailModal({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
+function TicketDetailModal({ ticket, session, onAddComment, onClose }: { ticket: Ticket; session: Session; onAddComment: (id: string, comment: Omit<Comment, 'isInternal'>) => void; onClose: () => void }) {
   const [rating, setRating] = useState(0);
+  const [reply, setReply] = useState('');
   const isDone   = ticket.status === 'Done';
   const isClosed = ticket.status === 'Closed';
+
+  const submitReply = () => {
+    if (!reply.trim()) return;
+    onAddComment(ticket.id, {
+      id: 'c' + Date.now(),
+      authorId: session.email,
+      authorName: session.name,
+      authorInitials: session.initials,
+      time: new Date().toISOString(),
+      body: reply.trim(),
+    });
+    setReply('');
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -234,17 +285,50 @@ function TicketDetailModal({ ticket, onClose }: { ticket: Ticket; onClose: () =>
           <div style={{ background:'var(--surface-2)', padding:16, borderRadius:10, marginBottom:16, fontSize:13, lineHeight:1.6, borderLeft: '4px solid var(--accent)' }}>
             {ticket.body}
           </div>
+          {ticket.attachments.length > 0 && (
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontWeight:600, fontSize:13, marginBottom:10 }}>Lampiran</div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:10 }}>
+                {ticket.attachments.map((a, i) => (
+                  a.type.startsWith('image/') ? (
+                    <a key={i} href={a.dataUrl} target="_blank" rel="noopener noreferrer">
+                      <img src={a.dataUrl} alt={a.name} style={{ width:90, height:90, objectFit:'cover', borderRadius:8, border:'1px solid var(--border)' }} />
+                    </a>
+                  ) : (
+                    <a key={i} href={a.dataUrl} download={a.name} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background:'var(--surface-2)', borderRadius:8, fontSize:12, textDecoration:'none', color:'var(--text)' }}>
+                      📄 {a.name}
+                    </a>
+                  )
+                ))}
+              </div>
+            </div>
+          )}
           <div style={{ fontWeight:600, fontSize:13, marginBottom:10 }}>Aktivitas</div>
           {ticket.comments.filter(c => !c.isInternal).length > 0 ? ticket.comments.filter(c => !c.isInternal).map(c => (
             <div key={c.id} className="comment">
               <div className="comment-head">
                 <div className="comment-avatar">{c.authorInitials}</div>
-                <div><div className="comment-name">{c.authorName}</div><div className="comment-time">{formatDateTime(c.time)}</div></div>
+                <div><div className="comment-name">{c.authorName}{c.authorId === session.email ? ' (Anda)' : ''}</div><div className="comment-time">{formatDateTime(c.time)}</div></div>
               </div>
               <div className="comment-body">{c.body}</div>
             </div>
           )) : (
             <div style={{ fontSize:13, color:'var(--text-muted)', padding:'12px 0' }}>Belum ada balasan dari tim IT</div>
+          )}
+          {!isClosed && (
+            <div style={{ marginTop:16 }}>
+              <textarea
+                className="textarea"
+                placeholder="Tulis balasan ke tim IT..."
+                value={reply}
+                onChange={e => setReply(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) submitReply(); }}
+                style={{ minHeight: 80 }}
+              />
+              <div style={{ display:'flex', justifyContent:'flex-end', marginTop:8 }}>
+                <button className="btn btn-primary btn-sm" onClick={submitReply} disabled={!reply.trim()}>Kirim Balasan</button>
+              </div>
+            </div>
           )}
           {(isDone || isClosed) && (
             <div style={{ marginTop:20, padding:16, border:'1px solid var(--status-done)', borderRadius:10, background:'var(--status-done-bg)' }}>
@@ -445,6 +529,20 @@ export default function DashboardPage() {
     }
   };
 
+  const addComment = (id: string, comment: Omit<Comment, 'isInternal'>) => {
+    const all = ticketStore.getAll();
+    const next = all.map(t => {
+      if (t.id !== id) return t;
+      const cmt: Comment = { ...comment, isInternal: false };
+      const newT: Ticket = { ...t, comments: [...(t.comments || []), cmt], updatedAt: new Date().toISOString() };
+      newT.activity = [...(t.activity || []), { type: 'comment', time: comment.time, who: comment.authorName, isInternal: false }];
+      return newT;
+    });
+    ticketStore.saveAll(next);
+    const updated = next.find(t => t.id === id);
+    if (updated) setMyTickets(prev => prev.map(t => t.id === id ? updated : t));
+  };
+
   // Nav page handler
   const handleNavClick = (nav: typeof currentNav) => {
     setCurrentNav(nav);
@@ -511,6 +609,8 @@ export default function DashboardPage() {
       {selectedTicket && (
         <TicketDetailModal
           ticket={selectedTicket}
+          session={session}
+          onAddComment={addComment}
           onClose={() => setSelectedTicketId(null)}
         />
       )}
