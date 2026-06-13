@@ -134,8 +134,15 @@ function partialTicketToRow(patch: Partial<Ticket>): Record<string, unknown> {
   return row;
 }
 
-function logError(action: string, error: { message: string } | null): void {
-  if (error) console.error(`[ticket-store] ${action} failed:`, error.message);
+// Logs the error (if any) and returns its message, or null on success — so
+// callers can `await` a mutation and surface the failure in the UI instead of
+// it being swallowed silently.
+function logError(action: string, error: { message: string } | null): string | null {
+  if (error) {
+    console.error(`[ticket-store] ${action} failed:`, error.message);
+    return error.message;
+  }
+  return null;
 }
 
 // ─── FETCH (with seed-on-empty fallback, mirrors old ticketStore.getAll) ────
@@ -190,16 +197,16 @@ export function useTickets() {
 
 // ─── MUTATIONS ───────────────────────────────────────────────────────────────
 
-export async function insertTicket(ticket: Ticket): Promise<void> {
+export async function insertTicket(ticket: Ticket): Promise<string | null> {
   const { error } = await supabase.from('tickets').insert(ticketToRow(ticket));
-  logError('insertTicket', error);
+  return logError('insertTicket', error);
 }
 
-export async function updateTicketFields(id: string, patch: Partial<Ticket>): Promise<void> {
+export async function updateTicketFields(id: string, patch: Partial<Ticket>): Promise<string | null> {
   const row = partialTicketToRow(patch);
-  if (Object.keys(row).length === 0) return;
+  if (Object.keys(row).length === 0) return null;
   const { error } = await supabase.from('tickets').update(row).eq('id', id);
-  logError('updateTicketFields', error);
+  return logError('updateTicketFields', error);
 }
 
 // Atomically append comment(s) / activity item(s) to a ticket, optionally
@@ -212,7 +219,7 @@ export async function updateTicketFields(id: string, patch: Partial<Ticket>): Pr
 export async function appendTicketEvent(
   id: string,
   ev: { comments?: Comment[]; activity?: ActivityItem[]; status?: TicketStatus; resolvedAt?: string },
-): Promise<void> {
+): Promise<string | null> {
   const { error } = await supabase.rpc('append_ticket_event', {
     p_id: id,
     p_comments: ev.comments ?? [],
@@ -220,16 +227,16 @@ export async function appendTicketEvent(
     p_status: ev.status ?? null,
     p_resolved_at: ev.resolvedAt ?? null,
   });
-  logError('appendTicketEvent', error);
+  return logError('appendTicketEvent', error);
 }
 
-export async function deleteTicket(id: string): Promise<void> {
+export async function deleteTicket(id: string): Promise<string | null> {
   const { error } = await supabase.from('tickets').delete().eq('id', id);
-  logError('deleteTicket', error);
+  return logError('deleteTicket', error);
 }
 
-export async function deleteTickets(ids: string[]): Promise<void> {
-  if (ids.length === 0) return;
+export async function deleteTickets(ids: string[]): Promise<string | null> {
+  if (ids.length === 0) return null;
   const { error } = await supabase.from('tickets').delete().in('id', ids);
-  logError('deleteTickets', error);
+  return logError('deleteTickets', error);
 }

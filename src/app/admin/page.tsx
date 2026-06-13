@@ -486,7 +486,8 @@ function AllTicketsPage({ tickets, setTickets, allPics, allCategories, allTeams,
     const merged: Ticket = { ...updated, updatedAt: now, resolvedAt: (['Done','Closed'].includes(updated.status) && !updated.resolvedAt) ? now : updated.resolvedAt, activity: statusChanged ? [...(updated.activity||[]), { type:'system', time:now, text:`Status: ${prev?.status} → ${updated.status} (Manual Admin)` }] : updated.activity };
     setTickets(prev => prev.map(t => t.id === merged.id ? merged : t));
     setEditTarget(null);
-    await updateTicketFields(merged.id, merged);
+    const err = await updateTicketFields(merged.id, merged);
+    if (err) alert('Perubahan tiket gagal tersimpan, coba lagi.\n\nDetail: ' + err);
   };
 
   const closeSingle = async (id: string, e: React.MouseEvent) => {
@@ -496,14 +497,19 @@ function AllTicketsPage({ tickets, setTickets, allPics, allCategories, allTeams,
     if (!t) return;
     const merged: Ticket = { ...t, status:'Closed', updatedAt:now, resolvedAt:t.resolvedAt||now, activity:[...(t.activity||[]),{ type:'system',time:now,text:`Status: ${t.status} → Closed (Manual Admin)` }] };
     setTickets(prev => prev.map(x => x.id===id?merged:x));
-    await updateTicketFields(id, merged);
+    const err = await updateTicketFields(id, merged);
+    if (err) alert('Gagal menutup tiket, coba lagi.\n\nDetail: ' + err);
   };
 
   const deleteSingle = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setConfirmState({
       message: 'Hapus tiket ini?',
-      onConfirm: () => { setTickets(prev => prev.filter(x => x.id !== id)); deleteTicket(id); },
+      onConfirm: async () => {
+        setTickets(prev => prev.filter(x => x.id !== id));
+        const err = await deleteTicket(id);
+        if (err) alert('Tiket gagal dihapus (akan muncul lagi saat refresh).\n\nDetail: ' + err);
+      },
     });
   };
 
@@ -1597,15 +1603,17 @@ function CutoffPage({ tickets, setTickets }: { tickets: Ticket[]; setTickets: Re
   const summary = STATUS_META.map(s => ({ ...s, count: tickets.filter(t => t.status === s.status).length }));
   const doneCount = tickets.filter(t => t.status === 'Done').length;
 
-  const executeCutoff = () => {
+  const executeCutoff = async () => {
     const now = new Date().toISOString();
     const toClose = tickets.filter(t => t.status === 'Done');
     setTickets(prev => prev.map(t => t.status==='Done' ? { ...t, status:'Closed' as const, updatedAt:now, activity:[...(t.activity||[]),{ type:'system' as const,time:now,text:'Status: Done → Closed (Cutoff by Admin)' }] } : t));
     setCutoffDone(true);
     setShowConfirm(false);
-    toClose.forEach(t => {
-      updateTicketFields(t.id, { status: 'Closed', updatedAt: now, activity: [...(t.activity||[]), { type:'system', time:now, text:'Status: Done → Closed (Cutoff by Admin)' }] });
-    });
+    const results = await Promise.all(toClose.map(t =>
+      updateTicketFields(t.id, { status: 'Closed', updatedAt: now, activity: [...(t.activity||[]), { type:'system', time:now, text:'Status: Done → Closed (Cutoff by Admin)' }] })
+    ));
+    const failed = results.filter(Boolean).length;
+    if (failed > 0) alert(`${failed} dari ${toClose.length} tiket gagal di-close (akan muncul lagi saat refresh). Coba ulangi cutoff.`);
   };
 
   return (

@@ -460,7 +460,8 @@ export default function PICPage() {
       patch.activity = [...(target.activity || []), { type: 'system', time: updatedAt, text: note }] as ActivityItem[];
     }
     setTickets(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t));
-    await updateTicketFields(id, patch);
+    const err = await updateTicketFields(id, patch);
+    if (err) alert('Perubahan gagal tersimpan, coba lagi.\n\nDetail: ' + err);
   };
 
   const addComment = async (id: string, comment: Omit<Comment, 'isInternal'>, isInternal: boolean) => {
@@ -479,7 +480,8 @@ export default function PICPage() {
       newActivity.push({ type: 'system', time: updatedAt, text: '🤖 Auto-close trigger terdeteksi → status → Done' });
     }
     setTickets(prev => prev.map(t => t.id === id ? { ...t, ...localPatch, comments: [...(t.comments || []), cmt], activity: [...(t.activity || []), ...newActivity] } : t));
-    await appendTicketEvent(id, ev);
+    const err = await appendTicketEvent(id, ev);
+    if (err) alert('Komentar gagal terkirim, coba lagi.\n\nDetail: ' + err);
   };
 
   const acceptTicket = (id: string) => {
@@ -666,7 +668,12 @@ export default function PICPage() {
             setTickets(prev => [newTicket, ...prev]);
             setSelectedId(newId);
             setShowEmailSim(false);
-            await insertTicket(newTicket);
+            const err = await insertTicket(newTicket);
+            if (err) {
+              setTickets(prev => prev.filter(t => t.id !== newId));
+              setSelectedId(null);
+              alert('Tiket gagal dibuat, coba lagi.\n\nDetail: ' + err);
+            }
           }}
         />
       )}

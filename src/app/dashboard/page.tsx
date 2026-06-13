@@ -41,6 +41,8 @@ function SubmitModal({ session, allPics, allTeams, allApps, allSlaRules, onClose
   const [fileError, setFileError] = useState('');
   const [appSearch, setAppSearch] = useState('');
   const [appOpen, setAppOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const appRef = React.useRef<HTMLDivElement>(null);
   const [taskSearch, setTaskSearch] = useState('');
   const [taskOpen, setTaskOpen] = useState(false);
@@ -111,7 +113,16 @@ function SubmitModal({ session, allPics, allTeams, allApps, allSlaRules, onClose
       activity: [{ type: 'system', time: now, text: `Tiket dibuat. PIC auto-assign: ${assignedPic?.name ?? 'Unassigned'} (dari routing rules)` }],
       isNew: true,
     };
-    await insertTicket(ticket);
+    setSubmitting(true);
+    setSubmitError('');
+    const err = await insertTicket(ticket);
+    setSubmitting(false);
+    if (err) {
+      // Save failed — keep the modal open so the user can retry instead of
+      // walking away thinking the ticket was created (it never reached the DB).
+      setSubmitError('Tiket gagal tersimpan. Periksa koneksi internet lalu coba kirim lagi. (' + err + ')');
+      return;
+    }
     onSubmit(ticket);
   };
 
@@ -236,9 +247,14 @@ function SubmitModal({ session, allPics, allTeams, allApps, allSlaRules, onClose
             )}
           </div>
         </div>
+        {submitError && (
+          <div style={{ margin:'0 24px', padding:'10px 14px', background:'rgba(244,67,54,0.1)', border:'1px solid #F44336', borderRadius:8, color:'#F44336', fontSize:13, lineHeight:1.5 }}>
+            ⚠ {submitError}
+          </div>
+        )}
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onClose}>Batal</button>
-          <button className="btn btn-primary" onClick={submit} disabled={!isValid}>✓ Kirim Tiket</button>
+          <button className="btn btn-secondary" onClick={onClose} disabled={submitting}>Batal</button>
+          <button className="btn btn-primary" onClick={submit} disabled={!isValid || submitting}>{submitting ? 'Menyimpan…' : '✓ Kirim Tiket'}</button>
         </div>
       </div>
     </div>
@@ -524,12 +540,14 @@ export default function DashboardPage() {
     const activityItem: ActivityItem = { type: 'comment', time: comment.time, who: comment.authorName, isInternal: false };
     const updatedAt = new Date().toISOString();
     setAllTickets(prev => prev.map(t => t.id === id ? { ...t, comments: [...(t.comments || []), cmt], activity: [...(t.activity || []), activityItem], updatedAt } : t));
-    await appendTicketEvent(id, { comments: [cmt], activity: [activityItem] });
+    const err = await appendTicketEvent(id, { comments: [cmt], activity: [activityItem] });
+    if (err) showToast('Komentar gagal terkirim, coba lagi. (' + err + ')', 'error');
   };
 
   const saveCsat = async (id: string, rating: number) => {
     setAllTickets(prev => prev.map(t => t.id === id ? { ...t, csat: rating } : t));
-    await updateTicketFields(id, { csat: rating });
+    const err = await updateTicketFields(id, { csat: rating });
+    if (err) showToast('Penilaian gagal tersimpan, coba lagi. (' + err + ')', 'error');
   };
 
   // Nav page handler
