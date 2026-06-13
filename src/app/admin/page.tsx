@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSession, logout } from '@/lib/auth';
-import { useTickets, updateTicketFields, deleteTicket, deleteTickets } from '@/lib/ticket-store';
+import { useTickets, updateTicketFields, deleteTicket } from '@/lib/ticket-store';
 import { SEED_ACCOUNTS } from '@/lib/account-store';
 import { adminCreateAccount, adminUpdateAccount, adminDeleteAccount } from '@/lib/admin-accounts';
 import { sendWelcomeEmail } from '@/lib/email';
@@ -507,18 +507,6 @@ function AllTicketsPage({ tickets, setTickets, allPics, allCategories, allTeams,
     });
   };
 
-  const deleteNonSeed = () => {
-    const nonSeedIds = tickets.filter(t => !SEED_TICKET_IDS.has(t.id)).map(t => t.id);
-    if (nonSeedIds.length === 0) return;
-    setConfirmState({
-      message: `Hapus ${nonSeedIds.length} tiket non-seed? Tiket seed (5) tetap aman.`,
-      onConfirm: () => {
-        setTickets(prev => prev.filter(t => SEED_TICKET_IDS.has(t.id)));
-        deleteTickets(nonSeedIds);
-      },
-    });
-  };
-
   return (
     <div>
       <div className="filters">
@@ -526,11 +514,6 @@ function AllTicketsPage({ tickets, setTickets, allPics, allCategories, allTeams,
         <select className="filter-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}><option value="">Semua status</option>{statusOptions.map(s=><option key={s} value={s}>{s}</option>)}</select>
         <select className="filter-select" value={filterCat} onChange={e => setFilterCat(e.target.value)}><option value="">Semua kategori</option>{allCategories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
         <select className="filter-select" value={filterPic} onChange={e => setFilterPic(e.target.value)}><option value="">Semua PIC</option>{allPics.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
-        {tickets.some(t => !SEED_TICKET_IDS.has(t.id)) && (
-          <button className="btn btn-ghost btn-sm" style={{ color:'#dc2626', whiteSpace:'nowrap' }} onClick={deleteNonSeed}>
-            🗑 Hapus Non-Seed ({tickets.filter(t => !SEED_TICKET_IDS.has(t.id)).length})
-          </button>
-        )}
       </div>
       <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:8 }}>Klik baris untuk edit · {visible.length} tiket ditampilkan.</div>
       <div className="card">
