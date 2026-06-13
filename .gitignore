@@ -22,3 +22,12 @@ npm-debug.log*
 # Data dumps & source artifacts (data tiket asli — jangan di-commit)
 ticket_export_*.xlsx
 Data Assign.jpeg
+mapping-specific-task-updated.xlsx
+scripts/.cache/
+
+# Local test artifacts (screenshot & script Playwright)
+.pwtest/
+
+# Backup files
+*.bak1
+*.bak2
