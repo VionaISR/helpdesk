@@ -60,3 +60,51 @@ export function generateTicketId(): string {
 export function initials(name: string): string {
   return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 }
+
+// ─── ATTACHMENTS ──────────────────────────────────────────────────────────────
+// Attachments are stored as base64 `data:` URLs. Chromium blocks top-level
+// navigation to a `data:` URL (so `<a href="data:..." target="_blank">` won't
+// open) and silently fails to download large ones. Converting to a Blob +
+// object URL (`blob:`) sidesteps both limits, so open/download work reliably.
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const comma = dataUrl.indexOf(',');
+  const header = dataUrl.slice(0, comma);
+  const data = dataUrl.slice(comma + 1);
+  const mime = header.match(/^data:([^;]+)/)?.[1] || 'application/octet-stream';
+  if (/;base64/i.test(header)) {
+    const binary = atob(data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  }
+  return new Blob([decodeURIComponent(data)], { type: mime });
+}
+
+export function openAttachment(att: { dataUrl: string }): void {
+  try {
+    const url = URL.createObjectURL(dataUrlToBlob(att.dataUrl));
+    window.open(url, '_blank', 'noopener');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch {
+    window.open(att.dataUrl, '_blank', 'noopener');
+  }
+}
+
+export function downloadAttachment(att: { dataUrl: string; name: string }): void {
+  try {
+    const url = URL.createObjectURL(dataUrlToBlob(att.dataUrl));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = att.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch {
+    const a = document.createElement('a');
+    a.href = att.dataUrl;
+    a.download = att.name;
+    a.click();
+  }
+}

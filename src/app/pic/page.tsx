@@ -7,7 +7,7 @@ import { getSession, logout } from '@/lib/auth';
 import { useTickets, insertTicket, updateTicketFields, appendTicketEvent } from '@/lib/ticket-store';
 import { specificTasks } from '@/lib/data';
 import { useMasterData } from '@/lib/master-data';
-import { formatDateTime, timeAgo, statusClass, slaProgress } from '@/lib/utils';
+import { formatDateTime, timeAgo, statusClass, slaProgress, openAttachment, downloadAttachment } from '@/lib/utils';
 import { analyze, checkAutoClose } from '@/lib/rule-engine';
 import type { Ticket, Session, Comment, ActivityItem, AnalysisResult, Notification, PIC, Team, App, Category } from '@/types';
 
@@ -236,13 +236,13 @@ function TicketDetail({ ticket, allPics, allTeams, allCategories, onUpdate, onAd
             <div style={{ display:'flex', flexWrap:'wrap', gap:10, marginTop:14 }}>
               {ticket.attachments.map((a, i) => (
                 a.type.startsWith('image/') ? (
-                  <a key={i} href={a.dataUrl} target="_blank" rel="noopener noreferrer">
+                  <button key={i} type="button" onClick={() => openAttachment(a)} title={`Buka ${a.name}`} style={{ padding:0, border:'none', background:'none', cursor:'pointer' }}>
                     <img src={a.dataUrl} alt={a.name} style={{ width:90, height:90, objectFit:'cover', borderRadius:8, border:'1px solid var(--border)' }} />
-                  </a>
+                  </button>
                 ) : (
-                  <a key={i} href={a.dataUrl} download={a.name} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background:'var(--surface-2)', borderRadius:8, fontSize:12, textDecoration:'none', color:'var(--text)' }}>
+                  <button key={i} type="button" onClick={() => downloadAttachment(a)} title={`Unduh ${a.name}`} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background:'var(--surface-2)', border:'none', borderRadius:8, fontSize:12, cursor:'pointer', color:'var(--text)' }}>
                     📄 {a.name}
-                  </a>
+                  </button>
                 )
               ))}
             </div>
