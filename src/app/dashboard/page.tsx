@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import emailjs from '@emailjs/browser';
 import { getSession, logout } from '@/lib/auth';
-import { useTickets, insertTicket, appendTicketEvent, updateTicketFields } from '@/lib/ticket-store';
+import { useTickets, insertTicket, appendTicketEvent, updateTicketFields, fetchTicketDetail } from '@/lib/ticket-store';
 import { emailConfig, specificTasks } from '@/lib/data';
 import { useMasterData } from '@/lib/master-data';
 import { formatDate, formatDateTime, timeAgo, statusClass, generateTicketId, openAttachment, downloadAttachment } from '@/lib/utils';
@@ -555,6 +555,20 @@ export default function DashboardPage() {
     setCurrentNav(nav);
     setPage(nav === 'home' ? 'home' : nav === 'tickets' ? 'tickets' : 'kb');
   };
+
+  // The list query omits the heavy jsonb columns (attachments/comments/
+  // activity); load them on demand when a ticket modal opens and merge into
+  // state so the modal shows the real attachments and reply thread. Declared
+  // before the early-return below to keep hook order stable.
+  useEffect(() => {
+    if (!selectedTicketId) return;
+    let cancelled = false;
+    fetchTicketDetail(selectedTicketId).then(detail => {
+      if (cancelled) return;
+      setAllTickets(prev => prev.map(t => t.id === selectedTicketId ? { ...t, ...detail } : t));
+    });
+    return () => { cancelled = true; };
+  }, [selectedTicketId, setAllTickets]);
 
   if (!session || masterLoading || ticketsLoading) return null;
 

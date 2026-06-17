@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getSession, logout } from '@/lib/auth';
-import { useTickets, insertTicket, updateTicketFields, appendTicketEvent } from '@/lib/ticket-store';
+import { useTickets, insertTicket, updateTicketFields, appendTicketEvent, fetchTicketDetail } from '@/lib/ticket-store';
 import { specificTasks } from '@/lib/data';
 import { useMasterData } from '@/lib/master-data';
 import { formatDateTime, timeAgo, statusClass, slaProgress, openAttachment, downloadAttachment } from '@/lib/utils';
@@ -455,13 +455,20 @@ export default function PICPage() {
     const target = tickets.find(t => t.id === id);
     if (!target) return;
     const updatedAt = new Date().toISOString();
-    const patch: Partial<Ticket> = { ...updates, updatedAt };
-    if (note) {
-      patch.activity = [...(target.activity || []), { type: 'system', time: updatedAt, text: note }] as ActivityItem[];
+    const noteItem: ActivityItem | null = note ? { type: 'system', time: updatedAt, text: note } : null;
+    // Optimistic local update (keeps the open ticket's activity in sync for UI).
+    setTickets(prev => prev.map(t => t.id === id
+      ? { ...t, ...updates, updatedAt, activity: noteItem ? [...(t.activity || []), noteItem] : t.activity }
+      : t));
+    // Persist scalar field changes. The activity note is appended atomically
+    // server-side (append_ticket_event) so a stale/empty local activity array
+    // can never clobber the stored history.
+    const err = await updateTicketFields(id, { ...updates, updatedAt });
+    if (err) { alert('Perubahan gagal tersimpan, coba lagi.\n\nDetail: ' + err); return; }
+    if (noteItem) {
+      const appendErr = await appendTicketEvent(id, { activity: [noteItem] });
+      if (appendErr) alert('Catatan aktivitas gagal tersimpan.\n\nDetail: ' + appendErr);
     }
-    setTickets(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t));
-    const err = await updateTicketFields(id, patch);
-    if (err) alert('Perubahan gagal tersimpan, coba lagi.\n\nDetail: ' + err);
   };
 
   const addComment = async (id: string, comment: Omit<Comment, 'isInternal'>, isInternal: boolean) => {
@@ -525,6 +532,20 @@ export default function PICPage() {
   }, [visible]);
 
   const selected = tickets.find(t => t.id === selectedId) ?? null;
+
+  // The list query omits the heavy jsonb columns (attachments/comments/
+  // activity), so load them on demand for whichever ticket is open and merge
+  // them into state. useTickets' poll preserves loaded detail, so this only
+  // refetches when the selection actually changes.
+  useEffect(() => {
+    if (!selectedId) return;
+    let cancelled = false;
+    fetchTicketDetail(selectedId).then(detail => {
+      if (cancelled) return;
+      setTickets(prev => prev.map(t => t.id === selectedId ? { ...t, ...detail } : t));
+    });
+    return () => { cancelled = true; };
+  }, [selectedId, setTickets]);
 
   // Nav page handler
   const handleNavClick = (nav: typeof currentNav) => {

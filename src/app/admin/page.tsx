@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSession, logout } from '@/lib/auth';
-import { useTickets, updateTicketFields, deleteTicket } from '@/lib/ticket-store';
+import { useTickets, updateTicketFields, appendTicketEvent, deleteTicket } from '@/lib/ticket-store';
 import { SEED_ACCOUNTS } from '@/lib/account-store';
 import { adminCreateAccount, adminUpdateAccount, adminDeleteAccount } from '@/lib/admin-accounts';
 import { sendWelcomeEmail } from '@/lib/email';
@@ -11,7 +11,7 @@ import { specificTasks, sampleUsers } from '@/lib/data';
 import { formatDate, statusClass, slaProgress } from '@/lib/utils';
 import { useMasterData, createPic, updatePic, deactivatePic, createCategory, updateCategory, deleteCategory, nextColor, createApp, updateApp, deleteApp, setAppPic, updateSlaRule, createKbArticle, updateKbArticle, deleteKbArticle, fetchUserProfiles, fetchAppUsers, markAppUserEmailSent, type UserProfile } from '@/lib/master-data';
 import { seedTickets } from '@/lib/data';
-import type { Ticket, TicketStatus, Session, PIC, Category, App, Team, SlaRule, KBArticle } from '@/types';
+import type { Ticket, TicketStatus, ActivityItem, Session, PIC, Category, App, Team, SlaRule, KBArticle } from '@/types';
 
 const SEED_TICKET_IDS = new Set(seedTickets.map(t => t.id));
 
@@ -483,11 +483,23 @@ function AllTicketsPage({ tickets, setTickets, allPics, allCategories, allTeams,
     const now = new Date().toISOString();
     const prev = tickets.find(t => t.id === updated.id);
     const statusChanged = prev?.status !== updated.status;
-    const merged: Ticket = { ...updated, updatedAt: now, resolvedAt: (['Done','Closed'].includes(updated.status) && !updated.resolvedAt) ? now : updated.resolvedAt, activity: statusChanged ? [...(updated.activity||[]), { type:'system', time:now, text:`Status: ${prev?.status} → ${updated.status} (Manual Admin)` }] : updated.activity };
+    const resolvedAt = (['Done','Closed'].includes(updated.status) && !updated.resolvedAt) ? now : updated.resolvedAt;
+    const statusItem: ActivityItem | null = statusChanged
+      ? { type:'system', time:now, text:`Status: ${prev?.status} → ${updated.status} (Manual Admin)` }
+      : null;
+    const merged: Ticket = { ...updated, updatedAt: now, resolvedAt, activity: statusItem ? [...(updated.activity||[]), statusItem] : updated.activity };
     setTickets(prev => prev.map(t => t.id === merged.id ? merged : t));
     setEditTarget(null);
+    // updateTicketFields ignores attachments/comments/activity, so editing a
+    // ticket from a (heavy-column-free) list snapshot can't wipe them. Only the
+    // edited scalar fields — including status & resolvedAt — are persisted.
     const err = await updateTicketFields(merged.id, merged);
-    if (err) alert('Perubahan tiket gagal tersimpan, coba lagi.\n\nDetail: ' + err);
+    if (err) { alert('Perubahan tiket gagal tersimpan, coba lagi.\n\nDetail: ' + err); return; }
+    // The status-change note is appended atomically server-side.
+    if (statusItem) {
+      const appendErr = await appendTicketEvent(merged.id, { activity: [statusItem] });
+      if (appendErr) alert('Catatan aktivitas gagal tersimpan.\n\nDetail: ' + appendErr);
+    }
   };
 
   const closeSingle = async (id: string, e: React.MouseEvent) => {
@@ -495,9 +507,12 @@ function AllTicketsPage({ tickets, setTickets, allPics, allCategories, allTeams,
     const now = new Date().toISOString();
     const t = tickets.find(t => t.id === id);
     if (!t) return;
-    const merged: Ticket = { ...t, status:'Closed', updatedAt:now, resolvedAt:t.resolvedAt||now, activity:[...(t.activity||[]),{ type:'system',time:now,text:`Status: ${t.status} → Closed (Manual Admin)` }] };
+    const statusItem: ActivityItem = { type:'system', time:now, text:`Status: ${t.status} → Closed (Manual Admin)` };
+    const merged: Ticket = { ...t, status:'Closed', updatedAt:now, resolvedAt:t.resolvedAt||now, activity:[...(t.activity||[]), statusItem] };
     setTickets(prev => prev.map(x => x.id===id?merged:x));
-    const err = await updateTicketFields(id, merged);
+    // append_ticket_event sets status/resolved_at/updated_at and appends the
+    // activity note atomically — no read-modify-write of the heavy columns.
+    const err = await appendTicketEvent(id, { activity: [statusItem], status: 'Closed', resolvedAt: t.resolvedAt || now });
     if (err) alert('Gagal menutup tiket, coba lagi.\n\nDetail: ' + err);
   };
 
@@ -1610,7 +1625,10 @@ function CutoffPage({ tickets, setTickets }: { tickets: Ticket[]; setTickets: Re
     setCutoffDone(true);
     setShowConfirm(false);
     const results = await Promise.all(toClose.map(t =>
-      updateTicketFields(t.id, { status: 'Closed', updatedAt: now, activity: [...(t.activity||[]), { type:'system', time:now, text:'Status: Done → Closed (Cutoff by Admin)' }] })
+      appendTicketEvent(t.id, {
+        activity: [{ type:'system', time:now, text:'Status: Done → Closed (Cutoff by Admin)' }],
+        status: 'Closed',
+      })
     ));
     const failed = results.filter(Boolean).length;
     if (failed > 0) alert(`${failed} dari ${toClose.length} tiket gagal di-close (akan muncul lagi saat refresh). Coba ulangi cutoff.`);

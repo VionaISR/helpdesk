@@ -293,10 +293,14 @@ create policy "sla_rules_write" on sla_rules for all using (auth_is_admin()) wit
 --   delete → PIC/admin only.
 alter table tickets enable row level security;
 drop policy if exists "tickets_read" on tickets;
+-- auth_role()/auth_email() are wrapped in scalar subqueries so Postgres
+-- evaluates them ONCE per statement (init-plan) instead of re-running the
+-- profiles lookup for every row — without this, a large tickets table makes
+-- SELECT * blow past statement_timeout. See Supabase RLS performance guide.
 create policy "tickets_read" on tickets for select
   using (
-    auth_role() in ('pic', 'admin')
-    or lower(from_email) = lower(coalesce(auth_email(), ''))
+    (select auth_role()) in ('pic', 'admin')
+    or lower(from_email) = lower(coalesce((select auth_email()), ''))
   );
 -- Drop the old combined write policy from earlier v6 revisions, then split.
 drop policy if exists "tickets_write" on tickets;
@@ -306,16 +310,16 @@ create policy "tickets_insert" on tickets for insert
 drop policy if exists "tickets_update" on tickets;
 create policy "tickets_update" on tickets for update
   using (
-    auth_role() in ('pic', 'admin')
-    or lower(from_email) = lower(coalesce(auth_email(), ''))
+    (select auth_role()) in ('pic', 'admin')
+    or lower(from_email) = lower(coalesce((select auth_email()), ''))
   )
   with check (
-    auth_role() in ('pic', 'admin')
-    or lower(from_email) = lower(coalesce(auth_email(), ''))
+    (select auth_role()) in ('pic', 'admin')
+    or lower(from_email) = lower(coalesce((select auth_email()), ''))
   );
 drop policy if exists "tickets_delete" on tickets;
 create policy "tickets_delete" on tickets for delete
-  using (auth_role() in ('pic', 'admin'));
+  using ((select auth_role()) in ('pic', 'admin'));
 
 -- App Users: only admins can see/manage the registered-account list. Creation
 -- happens via the service role (admin create-user API route), which bypasses RLS.
@@ -354,6 +358,9 @@ create index if not exists idx_tickets_status on tickets(status);
 create index if not exists idx_tickets_team on tickets(assignee_team_id);
 create index if not exists idx_tickets_assigned_to on tickets(assigned_to_id) where assigned_to_id is not null;
 create index if not exists idx_tickets_from_email on tickets(from_email);
+-- Matches the RLS ownership predicate `lower(from_email) = lower(auth_email())`
+-- so a regular user's ticket read is an index lookup, not a full scan.
+create index if not exists idx_tickets_from_email_lower on tickets(lower(from_email));
 create index if not exists idx_tickets_created_at on tickets(created_at desc);
 
 create index if not exists idx_app_users_email on app_users(email);

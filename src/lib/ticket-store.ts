@@ -99,6 +99,15 @@ function ticketToRow(t: Ticket): TicketRow {
 
 // Maps Ticket (camelCase) field names to tickets table (snake_case) columns,
 // used to build a partial update payload from Partial<Ticket>.
+//
+// NOTE: attachments / comments / activity are deliberately NOT here. They're
+// the heavy jsonb columns and are write-protected from blind overwrites:
+//   * attachments are written once, at insertTicket() time.
+//   * comments / activity are appended atomically server-side via
+//     append_ticket_event() (see appendTicketEvent below).
+// A caller that includes them in an updateTicketFields() patch will have them
+// silently ignored — this prevents a read-modify-write from a list snapshot
+// (which no longer carries these columns) from wiping the real data.
 const TICKET_FIELD_TO_COLUMN: Record<string, string> = {
   subject: 'subject',
   body: 'body',
@@ -118,13 +127,21 @@ const TICKET_FIELD_TO_COLUMN: Record<string, string> = {
   autoRouteConfidence: 'auto_route_confidence',
   slaDeadline: 'sla_deadline',
   resolvedAt: 'resolved_at',
-  attachments: 'attachments',
-  comments: 'comments',
-  activity: 'activity',
   csat: 'csat',
   createdAt: 'created_at',
   updatedAt: 'updated_at',
 };
+
+// Columns pulled for the ticket LIST. Excludes the heavy jsonb columns
+// (attachments / comments / activity) — base64 attachments alone can be
+// megabytes per row, and SELECT *-ing them across the whole table is what made
+// the list query exceed Postgres' statement_timeout. They're loaded on demand
+// per ticket via fetchTicketDetail() when a ticket is opened.
+const LIST_COLUMNS =
+  'id, subject, body, from_email, from_name, dept, cc, category, app, ' +
+  'specific_task, priority, assignee_team_id, assigned_to_id, assigned_name, ' +
+  'status, auto_routed, auto_route_confidence, sla_deadline, resolved_at, ' +
+  'csat, created_at, updated_at';
 
 function partialTicketToRow(patch: Partial<Ticket>): Record<string, unknown> {
   const row: Record<string, unknown> = {};
@@ -150,7 +167,7 @@ function logError(action: string, error: { message: string } | null): string | n
 export async function fetchTickets(): Promise<Ticket[]> {
   const { data, error } = await supabase
     .from('tickets')
-    .select('*')
+    .select(LIST_COLUMNS)
     .order('created_at', { ascending: false });
   logError('fetch tickets', error);
 
@@ -161,7 +178,31 @@ export async function fetchTickets(): Promise<Ticket[]> {
     if (!seedErr) return JSON.parse(JSON.stringify(seedTickets)) as Ticket[];
   }
 
-  return ((data ?? []) as TicketRow[]).map(mapTicketRow);
+  return ((data ?? []) as unknown as TicketRow[]).map(mapTicketRow);
+}
+
+// The heavy jsonb columns for a single ticket, loaded on demand when a ticket
+// is opened (the list query in fetchTickets omits them). Returns empty arrays
+// on error/not-found so callers can merge unconditionally.
+export interface TicketDetail {
+  attachments: Attachment[];
+  comments: Comment[];
+  activity: ActivityItem[];
+}
+
+export async function fetchTicketDetail(id: string): Promise<TicketDetail> {
+  const { data, error } = await supabase
+    .from('tickets')
+    .select('attachments, comments, activity')
+    .eq('id', id)
+    .single();
+  logError('fetch ticket detail', error);
+  const row = (data ?? null) as Pick<TicketRow, 'attachments' | 'comments' | 'activity'> | null;
+  return {
+    attachments: row?.attachments ?? [],
+    comments: row?.comments ?? [],
+    activity: row?.activity ?? [],
+  };
 }
 
 // ─── HOOK ────────────────────────────────────────────────────────────────────
@@ -177,7 +218,23 @@ export function useTickets() {
 
   const refresh = useCallback(async () => {
     const data = await fetchTickets();
-    setTickets(data);
+    // fetchTickets returns lightweight rows (no attachments/comments/activity).
+    // Preserve any heavy detail already loaded for a ticket — both lazily
+    // fetched detail (fetchTicketDetail) and optimistic local appends — so a
+    // background poll doesn't blank out the ticket the user currently has open.
+    setTickets(prev => {
+      if (prev.length === 0) return data;
+      const prevById = new Map(prev.map(t => [t.id, t]));
+      return data.map(t => {
+        const old = prevById.get(t.id);
+        if (!old) return t;
+        const hasDetail =
+          old.attachments.length > 0 || old.comments.length > 0 || old.activity.length > 0;
+        return hasDetail
+          ? { ...t, attachments: old.attachments, comments: old.comments, activity: old.activity }
+          : t;
+      });
+    });
     setLoading(false);
   }, []);
 
